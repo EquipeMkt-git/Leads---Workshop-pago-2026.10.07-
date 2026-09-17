@@ -110,7 +110,7 @@
       mensagens: copia(M.filter((m) => c || m.ativo === 'SIM'))
     };
   };
-  const config = { webhook: 'https://script.google.com/macros/s/SEU_ID/exec?src=hotmart&key=CHAVE', id_padrao: '8502151', id_vip: '8502486', base_id: '1ihgdFxaR5cM6xyAECvJ-IORN1dmghRin9gmRFCsHe5I', ultima_sincronizacao: atras(0.4), modo_teste: false,
+  const config = { webhook: 'https://script.google.com/macros/s/SEU_ID/exec?src=hotmart&key=CHAVE', id_padrao: '8502151', id_vip: '8502486', base_id: '1ihgdFxaR5cM6xyAECvJ-IORN1dmghRin9gmRFCsHe5I', ultima_sincronizacao: atras(0.4), modo_teste: false, hotmart_api: { configurada: false, client_id: '' },
     webhooks: [{ recebido_em: atras(0.2), evento: 'PURCHASE_APPROVED', produto: '8502486', transacao: 'HP1700102947', email: 'felipe.cardoso@exemplo.com', status: 'ok', resultado: 'Lead criado: L113' },
       { recebido_em: atras(1), evento: 'PURCHASE_CHARGEBACK', produto: '0', transacao: 'HP16015479281022', email: 'teste@example.com', status: 'ignorado', resultado: 'produto de teste da Hotmart (id 0) — ative o modo teste para aceitar' }] };
 
@@ -201,13 +201,23 @@
     'admin.lead.liberar': (b, u) => { const l = leadDe(b.id); Object.assign(l, { status: 'novo', responsavel_id: '', responsavel_nome: '', inicio_tratativa: '', motivo: '', fechado_em: '' }); hist(l.id, u, 'liberado', ''); return copia(l); },
     'admin.lead.excluir': (b) => { L.splice(L.findIndex((l) => l.id === b.id), 1); return true; },
     'admin.importar': (b, u) => {
-      let n = 0, d = 0;
+      let n = 0, d = 0, vip = 0;
+      const vistos = new Set(L.map((l) => l.email));
       b.linhas.forEach((x) => {
-        if (L.some((l) => (x.email && l.email === x.email.toLowerCase()))) { d++; return; }
-        L.unshift({ id: id('L'), criado_em: agora(), origem: 'importacao', status: 'novo', nome: x.nome, email: String(x.email || '').toLowerCase(), telefone: x.telefone, cidade: x.cidade, tipo_ingresso: x.tipo_ingresso, transacao: x.transacao, criado_por: u.nome });
-        n++;
+        const em = String(x.email || '').toLowerCase();
+        if (em && vistos.has(em)) { d++; return; }
+        vistos.add(em); n++; if (x.tipo_ingresso === 'vip') vip++;
+        if (!b.simular) L.unshift({ id: id('L'), criado_em: x.criado_em || agora(), origem: 'importacao', status: 'novo', nome: x.nome, email: em, telefone: x.telefone, cidade: x.cidade, tipo_ingresso: x.tipo_ingresso, transacao: x.transacao, criado_por: u.nome });
       });
-      return { importados: n, duplicados: d, invalidos: 0 };
+      return { simulacao: !!b.simular, importados: n, duplicados: d, invalidos: 0, sem_telefone: 0, viraram_vip: 0, vip, exemplos: [] };
+    },
+    'admin.hotmart.cred': (b) => { config.hotmart_api = { configurada: true, client_id: String(b.client_id).slice(0, 6) + '…' }; return config.hotmart_api; },
+    'admin.hotmart.importar': (b, u) => {
+      if (!config.hotmart_api.configurada) throw new Error('Cadastre o client_id e o client_secret da Hotmart em Ajustes.');
+      const novos = ['Paulo Viana', 'Lívia Duarte', 'Caio Pereira'];
+      if (!b.simular) novos.forEach((n, i) => L.unshift({ id: id('L'), criado_em: atras(300 + i), origem: 'hotmart', status: 'novo', nome: n, email: 'api' + i + '@exemplo.com', telefone: '55119' + (80000000 + i * 1111111), cidade: 'São Paulo / SP', tipo_ingresso: i === 1 ? 'vip' : 'padrao', transacao: 'HPAPI' + i, criado_por: 'Hotmart (importação)' }));
+      return { simulacao: !!b.simular, encontradas: 27, por_produto: { padrao: 20, vip: 7 }, importados: b.simular ? 3 : 3, duplicados: 24, invalidos: 0, sem_telefone: 1, viraram_vip: 1, vip: 1,
+        canceladas: 2, reembolsos_marcados: 1, desde: b.desde, exemplos: novos.map((n, i) => n + ' · (11) 9' + (8000 + i) + '-0000 · ' + (i === 1 ? 'vip' : 'padrao')) };
     },
     'admin.sincronizar': () => { config.ultima_sincronizacao = agora(); return { clientes: 18432, leads_atualizados: 3, em: agora() }; },
     'admin.processarFila': () => ({ processados: 0 }),
