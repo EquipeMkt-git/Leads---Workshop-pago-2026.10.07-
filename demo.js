@@ -15,20 +15,31 @@
   const pick = (a) => a[Math.floor(r() * a.length)];
 
   const U = [
-    { id: 'U1', nome: 'Coordenação 4blue', email: 'coord@demo.com', perfil: 'coordenador', foto: '', ativo: 'SIM' },
-    { id: 'U2', nome: 'Ana Ribeiro', email: 'ana@demo.com', perfil: 'usuario', foto: '', ativo: 'SIM' },
-    { id: 'U3', nome: 'Bruno Mendes', email: 'bruno@demo.com', perfil: 'usuario', foto: '', ativo: 'SIM' },
-    { id: 'U4', nome: 'Carla Duarte', email: 'carla@demo.com', perfil: 'usuario', foto: '', ativo: 'SIM' }
+    { id: 'U1', nome: 'Coordenação 4blue', email: 'coord@demo.com', perfil: 'coordenador', foto: '', ativo: 'SIM', recebe_leads: 'NAO' },
+    { id: 'U2', nome: 'Ana Ribeiro', email: 'ana@demo.com', perfil: 'usuario', foto: '', ativo: 'SIM', recebe_leads: 'SIM' },
+    { id: 'U3', nome: 'Bruno Mendes', email: 'bruno@demo.com', perfil: 'usuario', foto: '', ativo: 'SIM', recebe_leads: 'SIM' },
+    { id: 'U4', nome: 'Carla Duarte', email: 'carla@demo.com', perfil: 'usuario', foto: '', ativo: 'SIM', recebe_leads: 'SIM' }
   ];
   const P = [
     { id: 'P1', nome: 'Produto A (exemplo)', valor_total: '12000', valor_entrada: '2000', parcelas: 'entrada + 10x', descricao: '', ativo: 'SIM', origem: 'coordenador', criado_por: 'Coordenação' },
     { id: 'P2', nome: 'Produto B (exemplo)', valor_total: '4750', valor_entrada: '', parcelas: '12x', descricao: '', ativo: 'SIM', origem: 'coordenador', criado_por: 'Coordenação' },
     { id: 'P3', nome: 'Produto C (exemplo)', valor_total: '1997', valor_entrada: '1997', parcelas: 'à vista', descricao: '', ativo: 'SIM', origem: 'coordenador', criado_por: 'Coordenação' }
   ];
+  const F = [
+    ['Primeiro contato', '#0369B1', 'Abrir a conversa no WhatsApp\nApresentar-se como concierge do lead\nConfirmar que recebeu o acesso do ingresso'],
+    ['Confirmação de presença', '#F8B90C', 'Confirmar presença no Workshop\nExplicar horário, formato e o que levar\nMarcar o marco "Confirmou presença"'],
+    ['Upgrade VIP', '#7A4CC2', 'Apresentar os benefícios do VIP\nEnviar o link de upgrade\nConferir se o pagamento foi feito'],
+    ['Diagnóstico', '#0B7A9E', 'Enviar o link do diagnóstico\nLembrar quem não respondeu\nLer as respostas antes da reunião'],
+    ['Reunião', '#C2410C', 'Agendar a reunião\nConfirmar 1 dia antes\nRegistrar o combinado nas anotações'],
+    ['Oferta e venda', '#12A150', 'Apresentar a oferta certa para o momento do lead\nRegistrar negócio ganho ou perdido']
+  ].map((f, i) => ({ id: 'F' + (i + 1), nome: f[0], cor: f[1], instrucoes: f[2], ordem: String(i + 1), ativo: 'SIM' }));
+
   const M = [
-    { id: 'M1', titulo: 'Boas-vindas', ordem: '1', ativo: 'SIM', tipo_ingresso: 'todos', texto: 'Oi {primeiro_nome}, tudo bem? Aqui é {usuario}, da 4blue! Vi que você garantiu seu ingresso para o Workshop do dia 07/10 e queria te dar as boas-vindas. Posso te fazer uma pergunta rápida?' },
-    { id: 'M2', titulo: 'Boas-vindas VIP', ordem: '2', ativo: 'SIM', tipo_ingresso: 'vip', texto: 'Oi {primeiro_nome}! Aqui é {usuario}, da 4blue. Obrigado por garantir o ingresso VIP do Workshop 07/10! Vou cuidar pessoalmente da sua experiência. Posso te chamar aqui?' },
-    { id: 'M3', titulo: 'Convite para conversa', ordem: '3', ativo: 'SIM', tipo_ingresso: 'todos', texto: '{primeiro_nome}, antes do workshop quero entender o momento da sua empresa para você aproveitar ao máximo. Tem 5 minutinhos hoje?' }
+    { id: 'M1', titulo: 'Boas-vindas', fase_id: 'F1', ordem: '1', ativo: 'SIM', tipo_ingresso: 'todos', texto: 'Oi {primeiro_nome}, tudo bem? Aqui é {usuario}, da 4blue! Vi que você garantiu seu ingresso para o Workshop do dia 07/10 e queria te dar as boas-vindas. Posso te fazer uma pergunta rápida?' },
+    { id: 'M2', titulo: 'Boas-vindas VIP', fase_id: 'F1', ordem: '2', ativo: 'SIM', tipo_ingresso: 'vip', texto: 'Oi {primeiro_nome}! Aqui é {usuario}, da 4blue. Obrigado por garantir o ingresso VIP do Workshop 07/10! Vou cuidar pessoalmente da sua experiência. Posso te chamar aqui?' },
+    { id: 'M3', titulo: 'Convite para conversa', fase_id: 'F4', ordem: '3', ativo: 'SIM', tipo_ingresso: 'todos', texto: '{primeiro_nome}, antes do workshop quero entender o momento da sua empresa para você aproveitar ao máximo. Tem 5 minutinhos hoje?' },
+    { id: 'M4', titulo: 'Oferta do upgrade VIP', fase_id: 'F3', ordem: '4', ativo: 'SIM', tipo_ingresso: 'padrao', texto: '{primeiro_nome}, consegui liberar o upgrade para a área VIP do Workshop do dia {data_evento} por {valor_upgrade}. No VIP você fica nas primeiras fileiras e participa do almoço com o time. Quer que eu garanta a sua? Link: {link_upgrade}' },
+    { id: 'M5', titulo: 'Confirmar presença', fase_id: 'F2', ordem: '5', ativo: 'SIM', tipo_ingresso: 'todos', texto: '{primeiro_nome}, tudo certo para o dia {data_evento}? Me confirma aqui que você vai estar com a gente, por favor.' }
   ];
   const nomes = ['Mariana Costa', 'Rafael Lima', 'Juliana Alves', 'Pedro Henrique Rocha', 'Fernanda Martins', 'Lucas Oliveira', 'Camila Barros', 'Thiago Ferreira',
     'Patrícia Gomes', 'Gustavo Nunes', 'Aline Teixeira', 'Rodrigo Santana', 'Beatriz Moura', 'Felipe Cardoso', 'Larissa Pires', 'André Batista', 'Renata Vieira',
@@ -47,7 +58,9 @@
       cidade: pick(cidades), empresa: '', obs: '', status: 'novo', responsavel_id: '', responsavel_nome: '', inicio_tratativa: '', ultima_acao: '',
       fechado_em: '', motivo: '', mensagem_usada: '', transacao: 'HP' + (1700000000 + i * 7919), produto_hotmart: vip ? '8502486' : '8502151',
       valor_ingresso: vip ? '997' : '197', status_hotmart: 'APPROVED', cliente_mdl: '', cliente_ilu: '', eventos: '', cargo: pick(['Dono / Sócio', 'Dono / Sócio', 'Diretor', 'Gerente']),
-      faturamento: pick(fats), criado_por: i % 9 === 0 ? 'Ana Ribeiro' : 'Hotmart', atualizado_em: ''
+      faturamento: pick(fats), criado_por: i % 9 === 0 ? 'Ana Ribeiro' : 'Hotmart', atualizado_em: '',
+      fase_id: '', fase_em: '', confirmado: '', confirmado_em: '', upgrade: '', upgrade_em: '', diagnostico: '', diagnostico_em: '',
+      diagnostico_respostas: '', reuniao: '', reuniao_em: '', reuniao_obs: '', checkin: '', checkin_em: '', dados_extra: ''
     };
     if (r() < 0.22) l.cliente_mdl = pick(['Mamber Ativo · Máquina de Lucros Essencial', 'Ex Mamber · Máquina de Lucros PRO', 'Mentoria Cancelada · Máquina de Lucros Essencial']);
     if (r() < 0.2) l.cliente_ilu = 'Ex iluminista';
@@ -72,7 +85,21 @@
     l.inicio_tratativa = atras(ini); l.ultima_acao = atras(ini * r());
     l.status = 'tratativa';
     hist(l.id, u, 'tratativa_iniciada', 'Mensagem: Boas-vindas', l.inicio_tratativa);
-    const x = r();
+    const fi = Math.min(F.length - 1, Math.floor(r() * F.length));
+    l.fase_id = F[fi].id; l.fase_em = l.ultima_acao;
+    if (fi >= 1) { l.confirmado = r() < 0.75 ? 'sim' : 'nao'; l.confirmado_em = l.inicio_tratativa; }
+    if (fi >= 2 && l.tipo_ingresso !== 'vip') { const x2 = r(); l.upgrade = x2 < 0.3 ? 'feito' : (x2 < 0.7 ? 'enviado' : 'nao_quer'); l.upgrade_em = l.ultima_acao; if (l.upgrade === 'feito') l.tipo_ingresso = 'vip'; }
+    if (fi >= 3) {
+      l.diagnostico = r() < 0.6 ? 'feito' : 'enviado'; l.diagnostico_em = l.ultima_acao;
+      if (l.diagnostico === 'feito') l.diagnostico_respostas = JSON.stringify({
+        'Qual seu faturamento mensal?': l.faturamento, 'Quantos funcionários?': String(3 + Math.floor(r() * 40)),
+        'Maior desafio hoje': pick(['Fluxo de caixa apertado', 'Não sei o preço certo', 'Equipe sem processo', 'Margem baixa']),
+        'Já usa algum sistema financeiro?': pick(['Planilha', 'ERP', 'Nada organizado'])
+      });
+    }
+    if (fi >= 4) { l.reuniao = r() < 0.7 ? 'feita' : 'agendada'; l.reuniao_em = l.ultima_acao; if (l.reuniao === 'feita') l.reuniao_obs = 'Entende que precisa organizar o financeiro. Ficou de conversar com o sócio.'; }
+    if (r() < 0.3) { l.checkin = 'sim'; l.checkin_em = l.ultima_acao; }
+    const x = i % 7 === 3 ? 0.1 : (i % 7 === 5 ? 0.45 : (i % 11 === 7 ? 0.58 : 0.9));
     if (x < 0.35) {
       const p = pick(P);
       l.status = 'ganho'; l.fechado_em = l.ultima_acao;
@@ -107,10 +134,14 @@
       leads: copia(L.filter((l) => c || l.status === 'novo' || l.responsavel_id === u.id)),
       vendas: copia(V.filter((v) => c || v.usuario_id === u.id)),
       produtos: copia(P.filter((p) => c || p.ativo === 'SIM')),
-      mensagens: copia(M.filter((m) => c || m.ativo === 'SIM'))
+      mensagens: copia(M.filter((m) => c || m.ativo === 'SIM')),
+      fases: copia(F.filter((f) => c || f.ativo === 'SIM')),
+      links: { upgrade: config.upgrade_url, upgrade_valor: config.upgrade_valor, diagnostico: config.diagnostico_url, evento: config.evento_data }
     };
   };
-  const config = { webhook: 'https://script.google.com/macros/s/SEU_ID/exec?src=hotmart&key=CHAVE', id_padrao: '8502151', id_vip: '8502486', base_id: '1ihgdFxaR5cM6xyAECvJ-IORN1dmghRin9gmRFCsHe5I', ultima_sincronizacao: atras(0.4), modo_teste: false, hotmart_api: { configurada: false, client_id: '' },
+  const config = { upgrade_url: 'https://pay.hotmart.com/exemplo-upgrade-vip', upgrade_valor: '50', diagnostico_url: 'https://forms.exemplo.com/diagnostico', evento_data: '2026-10-07', distribuicao_auto: false,
+    webhook_dados: 'https://script.google.com/macros/s/SEU_ID/exec?src=dados&key=CHAVE&tipo=diagnostico',
+    webhook: 'https://script.google.com/macros/s/SEU_ID/exec?src=hotmart&key=CHAVE', id_padrao: '8502151', id_vip: '8502486', base_id: '1ihgdFxaR5cM6xyAECvJ-IORN1dmghRin9gmRFCsHe5I', ultima_sincronizacao: atras(0.4), modo_teste: false, hotmart_api: { configurada: false, client_id: '' },
     webhooks: [{ recebido_em: atras(0.2), evento: 'PURCHASE_APPROVED', produto: '8502486', transacao: 'HP1700102947', email: 'felipe.cardoso@exemplo.com', status: 'ok', resultado: 'Lead criado: L113' },
       { recebido_em: atras(1), evento: 'PURCHASE_CHARGEBACK', produto: '0', transacao: 'HP16015479281022', email: 'teste@example.com', status: 'ignorado', resultado: 'produto de teste da Hotmart (id 0) — ative o modo teste para aceitar' }] };
 
@@ -176,10 +207,61 @@
     'admin.usuario.salvar': (b) => {
       const d = b.usuario;
       if (!d.nome || !d.email) throw new Error('Preencha nome e e-mail.');
-      if (d.id) { const x = U.find((y) => y.id === d.id); Object.assign(x, { nome: d.nome, email: d.email.toLowerCase(), perfil: d.perfil, ativo: d.ativo }); return copia(x); }
+      if (d.id) { const x = U.find((y) => y.id === d.id); Object.assign(x, { nome: d.nome, email: d.email.toLowerCase(), perfil: d.perfil, ativo: d.ativo, recebe_leads: d.recebe_leads }); return copia(x); }
       if (!d.senha || d.senha.length < 6) throw new Error('Defina uma senha com ao menos 6 caracteres.');
-      const x = { id: id('U'), nome: d.nome, email: d.email.toLowerCase(), perfil: d.perfil, ativo: d.ativo, foto: '' };
+      const x = { id: id('U'), nome: d.nome, email: d.email.toLowerCase(), perfil: d.perfil, ativo: d.ativo, recebe_leads: d.recebe_leads || 'SIM', foto: '' };
       U.push(x); return copia(x);
+    },
+    'lead.fase': (b, u) => { const l = permitido(u, b.id); const de = (F.find((f) => f.id === l.fase_id) || {}).nome || 'sem fase'; l.fase_id = b.fase_id; l.fase_em = agora(); l.ultima_acao = agora(); if (l.status === 'novo') l.status = 'tratativa'; hist(l.id, u, 'fase', de + ' → ' + (F.find((f) => f.id === b.fase_id) || {}).nome); return copia(l); },
+    'lead.marco': (b, u) => {
+      const l = permitido(u, b.id);
+      l[b.campo] = b.valor; l[b.campo + '_em'] = b.valor ? agora() : ''; l.ultima_acao = agora();
+      if (b.campo === 'reuniao' && b.obs !== undefined) l.reuniao_obs = b.obs;
+      if (b.campo === 'upgrade' && b.valor === 'feito') l.tipo_ingresso = 'vip';
+      hist(l.id, u, 'marco', b.campo + ': ' + (b.valor || 'limpo'));
+      return copia(l);
+    },
+    'admin.fase.salvar': (b) => {
+      const d = b.fase;
+      if (d.id) { const x = F.find((y) => y.id === d.id); Object.assign(x, d); return copia(x); }
+      const x = Object.assign({}, d, { id: id('F') }); F.push(x); return copia(x);
+    },
+    'admin.fase.excluir': (b) => {
+      if (L.some((l) => l.fase_id === b.id)) throw new Error('Há leads nesta fase. Mova-os antes ou desative a fase.');
+      F.splice(F.findIndex((f) => f.id === b.id), 1); return true;
+    },
+    'admin.distribuir': (b, u) => {
+      const cs = U.filter((x) => x.ativo === 'SIM' && (x.perfil !== 'coordenador' || x.recebe_leads === 'SIM'));
+      if (!cs.length) throw new Error('Cadastre os concierges em Equipe antes de distribuir.');
+      const sem = L.filter((l) => l.status === 'novo' && !l.responsavel_id);
+      const porUsuario = {};
+      const abertos = {};
+      cs.forEach((x) => { abertos[x.id] = L.filter((l) => l.responsavel_id === x.id && (l.status === 'novo' || l.status === 'tratativa')).length; });
+      sem.forEach((l) => {
+        let melhor = cs[0];
+        cs.forEach((x) => { if (abertos[x.id] < abertos[melhor.id]) melhor = x; });
+        abertos[melhor.id]++;
+        porUsuario[melhor.nome] = (porUsuario[melhor.nome] || 0) + 1;
+        if (!b.simular) { l.responsavel_id = melhor.id; l.responsavel_nome = melhor.nome; l.fase_id = l.fase_id || F[0].id; }
+      });
+      if (!b.simular && sem.length) hist('', u, 'distribuicao', sem.length + ' leads distribuídos');
+      return { simulacao: !!b.simular, distribuidos: sem.length, por_usuario: porUsuario, concierges: cs.length };
+    },
+    'admin.importar.marcos': (b, u) => {
+      let ach = 0, nao = 0, atu = 0;
+      const faltam = [];
+      b.linhas.forEach((r) => {
+        const l = L.find((x) => (r.email && x.email === String(r.email).toLowerCase()) || (r.telefone && x.telefone && x.telefone.slice(-8) === String(r.telefone).replace(/\D/g, '').slice(-8)));
+        if (!l) { nao++; if (faltam.length < 20) faltam.push(r.nome || r.email || r.telefone); return; }
+        ach++;
+        if (b.simular) return;
+        atu++;
+        if (b.tipo === 'checkin') { l.checkin = 'sim'; l.checkin_em = agora(); }
+        else if (b.tipo === 'confirmacao') { l.confirmado = 'sim'; l.confirmado_em = agora(); }
+        else if (b.tipo === 'diagnostico') { l.diagnostico = 'feito'; l.diagnostico_em = agora(); l.diagnostico_respostas = JSON.stringify(r.respostas || {}); }
+        else { l.dados_extra = JSON.stringify(Object.assign({}, JSON.parse(l.dados_extra || '{}'), r.respostas || {})); }
+      });
+      return { simulacao: !!b.simular, tipo: b.tipo, linhas: b.linhas.length, encontrados: ach, atualizados: atu, nao_encontrados: nao, exemplos_nao_encontrados: faltam };
     },
     'admin.produto.salvar': (b, u) => {
       const d = b.produto;
@@ -221,7 +303,19 @@
     },
     'admin.sincronizar': () => { config.ultima_sincronizacao = agora(); return { clientes: 18432, leads_atualizados: 3, em: agora() }; },
     'admin.processarFila': () => ({ processados: 0 }),
-    'admin.config': (b) => { const c = b.config || {}; if (c.HOTMART_ID_PADRAO) config.id_padrao = c.HOTMART_ID_PADRAO; if (c.HOTMART_ID_VIP) config.id_vip = c.HOTMART_ID_VIP; if (c.BASE_CLIENTES_ID) config.base_id = c.BASE_CLIENTES_ID; if (c.HOTMART_MODO_TESTE) config.modo_teste = c.HOTMART_MODO_TESTE === 'SIM'; return copia(config); }
+    'admin.config': (b) => {
+      const c = b.config || {};
+      if (c.HOTMART_ID_PADRAO) config.id_padrao = c.HOTMART_ID_PADRAO;
+      if (c.HOTMART_ID_VIP) config.id_vip = c.HOTMART_ID_VIP;
+      if (c.BASE_CLIENTES_ID) config.base_id = c.BASE_CLIENTES_ID;
+      if (c.HOTMART_MODO_TESTE) config.modo_teste = c.HOTMART_MODO_TESTE === 'SIM';
+      if (c.UPGRADE_VIP_URL !== undefined) config.upgrade_url = c.UPGRADE_VIP_URL;
+      if (c.UPGRADE_VIP_VALOR) config.upgrade_valor = c.UPGRADE_VIP_VALOR;
+      if (c.DIAGNOSTICO_URL !== undefined) config.diagnostico_url = c.DIAGNOSTICO_URL;
+      if (c.EVENTO_DATA) config.evento_data = c.EVENTO_DATA;
+      if (c.DISTRIBUICAO_AUTO) config.distribuicao_auto = c.DISTRIBUICAO_AUTO === 'SIM';
+      return copia(config);
+    }
   };
 
   window.DemoAPI = {
