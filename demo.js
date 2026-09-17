@@ -40,7 +40,7 @@
 
   const L = nomes.map((n, i) => {
     const vip = r() < 0.3;
-    const email = n.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '.') + '@exemplo.com';
+    const email = n.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '.') + '@exemplo.com';
     const l = {
       id: 'L' + (100 + i), criado_em: atras(2 + i * 9 + r() * 5), origem: i % 9 === 0 ? 'manual' : 'hotmart', tipo_ingresso: vip ? 'vip' : 'padrao',
       nome: n, email, telefone: '55' + pick(['11', '41', '62', '21', '85', '19']) + '9' + String(10000000 + Math.floor(r() * 89999999)),
@@ -110,7 +110,9 @@
       mensagens: copia(M.filter((m) => c || m.ativo === 'SIM'))
     };
   };
-  const config = { webhook: 'https://script.google.com/macros/s/SEU_ID/exec?src=hotmart&key=CHAVE', id_padrao: '8502151', id_vip: '8502486', base_id: '1ihgdFxaR5cM6xyAECvJ-IORN1dmghRin9gmRFCsHe5I', ultima_sincronizacao: atras(0.4) };
+  const config = { webhook: 'https://script.google.com/macros/s/SEU_ID/exec?src=hotmart&key=CHAVE', id_padrao: '8502151', id_vip: '8502486', base_id: '1ihgdFxaR5cM6xyAECvJ-IORN1dmghRin9gmRFCsHe5I', ultima_sincronizacao: atras(0.4), modo_teste: false,
+    webhooks: [{ recebido_em: atras(0.2), evento: 'PURCHASE_APPROVED', produto: '8502486', transacao: 'HP1700102947', email: 'felipe.cardoso@exemplo.com', status: 'ok', resultado: 'Lead criado: L113' },
+      { recebido_em: atras(1), evento: 'PURCHASE_CHARGEBACK', produto: '0', transacao: 'HP16015479281022', email: 'teste@example.com', status: 'ignorado', resultado: 'produto de teste da Hotmart (id 0) — ative o modo teste para aceitar' }] };
 
   const rotas = {
     'login': (b) => {
@@ -208,7 +210,8 @@
       return { importados: n, duplicados: d, invalidos: 0 };
     },
     'admin.sincronizar': () => { config.ultima_sincronizacao = agora(); return { clientes: 18432, leads_atualizados: 3, em: agora() }; },
-    'admin.config': (b) => { const c = b.config || {}; if (c.HOTMART_ID_PADRAO) config.id_padrao = c.HOTMART_ID_PADRAO; if (c.HOTMART_ID_VIP) config.id_vip = c.HOTMART_ID_VIP; if (c.BASE_CLIENTES_ID) config.base_id = c.BASE_CLIENTES_ID; return copia(config); }
+    'admin.processarFila': () => ({ processados: 0 }),
+    'admin.config': (b) => { const c = b.config || {}; if (c.HOTMART_ID_PADRAO) config.id_padrao = c.HOTMART_ID_PADRAO; if (c.HOTMART_ID_VIP) config.id_vip = c.HOTMART_ID_VIP; if (c.BASE_CLIENTES_ID) config.base_id = c.BASE_CLIENTES_ID; if (c.HOTMART_MODO_TESTE) config.modo_teste = c.HOTMART_MODO_TESTE === 'SIM'; return copia(config); }
   };
 
   window.DemoAPI = {
