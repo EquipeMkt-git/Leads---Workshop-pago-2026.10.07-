@@ -22,11 +22,11 @@
 
   const S = {
     token: null, user: null, modo: 'usuario', view: 'novo',
-    leads: [], vendas: [], produtos: [], mensagens: [], usuarios: [], historico: [], config: {},
+    leads: [], vendas: [], produtos: [], mensagens: [], usuarios: [], historico: [], config: {}, fases: [], links: {},
     busca: '', filtro: 'todos', limite: 60,
     adm: { status: 'todos', resp: 'todos', tipo: 'todos', cliente: 'todos' },
     painel: { resp: 'todos', tipo: 'todos' },
-    catalogo: 'produtos',
+    catalogo: 'fases', funilLista: false,
     carregado: false, sync: false
   };
 
@@ -96,6 +96,23 @@
   const ehMdlAtivo = (l) => /ativ/i.test(l.cliente_mdl || '');
   const ehCliente = (l) => !!(l.cliente_mdl || l.cliente_ilu);
   const vendasDoLead = (id) => S.vendas.filter((v) => v.lead_id === id);
+  const faseDe = (l) => S.fases.find((f) => f.id === l.fase_id) || null;
+  const fasesAtivas = () => S.fases.filter((f) => f.ativo !== 'NAO');
+  const MARCOS_INFO = {
+    confirmado: { rot: 'Presença', ic: 'check', vals: { sim: ['Confirmou presença', 'ok'], nao: ['Não vai participar', 'alerta'] } },
+    upgrade: { rot: 'Upgrade VIP', ic: 'estrela', vals: { enviado: ['Upgrade enviado', 'evento'], feito: ['Fez upgrade VIP', 'vip'], nao_quer: ['Recusou o upgrade', ''] } },
+    diagnostico: { rot: 'Diagnóstico', ic: 'leads', vals: { enviado: ['Diagnóstico enviado', 'evento'], feito: ['Diagnóstico feito', 'ok'] } },
+    reuniao: { rot: 'Reunião', ic: 'chat', vals: { agendada: ['Reunião agendada', 'evento'], feita: ['Reunião feita', 'ok'], nao_compareceu: ['Faltou na reunião', 'alerta'] } },
+    checkin: { rot: 'Participou', ic: 'trofeu', vals: { sim: ['Participou do Workshop', 'ok'], nao: ['Não participou', 'alerta'] } }
+  };
+  /** Rótulo claro de cliente: separa quem está ativo de quem já saiu. */
+  function rotuloCliente(txt, produto) {
+    const t = String(txt || '');
+    if (!t) return null;
+    const st = t.split('·')[0].trim();
+    const ativo = /ativ/i.test(st) && !/ex |cancel|reembols|suspens|congel/i.test(st);
+    return { ativo, cls: ativo ? (produto === 'MDL' ? 'mdl' : 'ilu') : 'exmdl', curto: (ativo ? produto + ' ativo' : 'Ex-' + produto) , titulo: produto + ': ' + t, detalhe: st };
+  }
   const souCoord = () => S.user && S.user.perfil === 'coordenador';
   const usuarioPorId = (id) => S.usuarios.find((u) => u.id === id);
 
@@ -124,6 +141,9 @@
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
     relogio: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
     sair: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>',
+    funil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h18l-7 8v7l-4 2v-9z"/></svg>',
+    copiar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>',
+    seta: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
     lixo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>'
   };
 
@@ -185,6 +205,8 @@
       S.vendas = d.vendas || [];
       S.produtos = d.produtos || [];
       S.mensagens = d.mensagens || [];
+      S.fases = d.fases || [];
+      S.links = d.links || {};
       if (d.usuarios) S.usuarios = d.usuarios;
       if (d.historico) S.historico = d.historico;
       if (d.config) S.config = d.config;
@@ -247,7 +269,7 @@
     const meu = (st) => S.leads.filter((l) => l.status === st && (st === 'novo' || l.responsavel_id === S.user.id)).length;
     return [
       { id: 'novo', rot: 'Contatos', ic: I.contatos, n: meu('novo') },
-      { id: 'tratativa', rot: 'Tratativas', ic: I.chat, n: meu('tratativa') },
+      { id: 'funil', rot: 'Funil', ic: I.funil, n: meu('tratativa') },
       { id: 'ganho', rot: 'Ganhos', ic: I.trofeu, n: meu('ganho') },
       { id: 'perdido', rot: 'Perdidos', ic: I.xcirc, n: meu('perdido') },
       { id: 'reembolso', rot: 'Reembolso', ic: I.volta, n: meu('reembolso') }
@@ -321,6 +343,8 @@
       else if (v === 'equipe') m.innerHTML = viewEquipe();
       else if (v === 'catalogo') m.innerHTML = viewCatalogo();
       else if (v === 'ajustes') m.innerHTML = viewAjustes();
+    } else if (v === 'funil') {
+      m.innerHTML = viewFunil();
     } else {
       m.innerHTML = viewLista(v);
     }
@@ -380,6 +404,40 @@
         : vazio(st)}`;
   }
 
+  function viewFunil() {
+    const uid = S.user.id;
+    const base = S.leads.filter((l) => l.status === 'tratativa' && (S.modo === 'coord' || l.responsavel_id === uid));
+    const lista = aplicaFiltroChip(aplicaBusca(base), S.filtro);
+    const fases = fasesAtivas();
+    const semFase = lista.filter((l) => !faseDe(l));
+    const ord = (a, b) => String(a.ultima_acao || a.inicio_tratativa).localeCompare(String(b.ultima_acao || b.inicio_tratativa));
+    const cabecalho = `
+      <div class="page-head"><h2>Funil</h2>
+        <div class="acoes">
+          <button class="btn sm line" data-act="ver-funil">${S.funilLista ? I.funil : I.leads}${S.funilLista ? 'Funil' : 'Lista'}</button>
+          <button class="btn sm amarelo" data-act="novo-lead">${I.mais}Lead</button>
+        </div></div>
+      <div class="busca">${I.busca}<input class="input" data-busca placeholder="Buscar nome, telefone, e-mail, cidade" value="${esc(S.busca)}"></div>
+      <div class="chips">${[['todos', 'Todos'], ['vip', 'VIP'], ['padrao', 'Padrão'], ['clientes', 'Clientes'], ['parados', 'Parados +48h']]
+        .map(([k, r]) => `<button class="chip ${S.filtro === k ? 'on' : ''}" data-chip="${k}">${r}<span class="n">${aplicaFiltroChip(aplicaBusca(base), k).length}</span></button>`).join('')}</div>`;
+    if (!lista.length) return cabecalho + vazio('tratativa');
+    if (S.funilLista) {
+      return cabecalho + `<div class="lista">${lista.sort(ord).map(cardLead).join('')}</div>`;
+    }
+    const col = (f, leads) => `
+      <section class="kcol">
+        <header class="kcol-head" style="border-top-color:${f ? esc(f.cor) : '#C7D0DB'}">
+          <div class="kcol-tit"><b>${f ? esc(f.nome) : 'Sem fase'}</b><span class="kcol-n">${leads.length}</span></div>
+          ${f && f.instrucoes ? `<details class="kcol-inst"><summary>O que fazer nesta fase</summary><ul>${String(f.instrucoes).split('\n').filter(Boolean).map((x) => `<li>${esc(x)}</li>`).join('')}</ul></details>` : ''}
+        </header>
+        <div class="kcol-body">${leads.length ? leads.sort(ord).map(cardLead).join('') : '<p class="muted small" style="padding:8px 2px">Nenhum lead aqui.</p>'}</div>
+      </section>`;
+    return cabecalho + `<div class="kanban">
+      ${fases.map((f) => col(f, lista.filter((l) => l.fase_id === f.id))).join('')}
+      ${semFase.length ? col(null, semFase) : ''}
+    </div>`;
+  }
+
   function vazio(st) {
     const t = {
       novo: ['Nenhum contato novo', 'Quando alguém comprar o ingresso, o lead aparece aqui.'],
@@ -394,8 +452,14 @@
   function tagsLead(l, completo) {
     const t = [];
     t.push(l.tipo_ingresso === 'vip' ? `<span class="tag vip">${I.estrela}VIP</span>` : '<span class="tag padrao">Padrão</span>');
-    if (l.cliente_mdl) t.push(`<span class="tag ${ehMdlAtivo(l) ? 'mdl' : 'exmdl'}" title="${esc(l.cliente_mdl)}">${ehMdlAtivo(l) ? 'Cliente MDL' : 'Ex-MDL'}</span>`);
-    if (l.cliente_ilu) t.push(`<span class="tag ilu" title="${esc(l.cliente_ilu)}">ILU</span>`);
+    Object.keys(MARCOS_INFO).forEach((k) => {
+      const v = MARCOS_INFO[k].vals[l[k]];
+      if (v) t.push(`<span class="tag ${v[1]}" title="${esc(MARCOS_INFO[k].rot)}">${esc(v[0])}</span>`);
+    });
+    const mdl = rotuloCliente(l.cliente_mdl, 'MDL');
+    if (mdl) t.push(`<span class="tag ${mdl.cls}" title="${esc(mdl.titulo)}">${esc(mdl.curto)}</span>`);
+    const ilu = rotuloCliente(l.cliente_ilu, 'ILU');
+    if (ilu) t.push(`<span class="tag ${ilu.cls}" title="${esc(ilu.titulo)}">${esc(ilu.curto)}</span>`);
     const ev = eventosDe(l);
     if (ev.length) t.push(`<span class="tag evento">${ev.length} evento${ev.length > 1 ? 's' : ''}</span>`);
     if (l.status === 'tratativa' && horasDesde(l.ultima_acao || l.inicio_tratativa) > 48) t.push(`<span class="tag alerta">${I.relogio}Parado ${rel(l.ultima_acao || l.inicio_tratativa).replace('há ', '')}</span>`);
@@ -411,10 +475,11 @@
         <button class="btn whats" data-act="wa" data-id="${l.id}">${I.whats}Iniciar conversa</button>
         <button class="btn line icon" data-act="abrir" data-id="${l.id}" aria-label="Detalhes">${I.leads}</button></div>`;
     } else if (l.status === 'tratativa') {
+      const f = faseDe(l);
       rodape = `<div class="lead-actions">
         <button class="btn whats icon" data-act="wa" data-id="${l.id}" aria-label="WhatsApp">${I.whats}</button>
-        <button class="btn verde sm" data-act="ganho" data-id="${l.id}">${I.trofeu}Ganho</button>
-        <button class="btn line sm" data-act="perdido" data-id="${l.id}">Perdido</button></div>`;
+        <button class="btn line sm" data-act="fase" data-id="${l.id}" style="border-color:${f ? esc(f.cor) : 'var(--borda)'}">${I.seta}${f ? esc(f.nome) : 'Escolher fase'}</button>
+        <button class="btn verde sm icon" data-act="ganho" data-id="${l.id}" aria-label="Negócio ganho">${I.trofeu}</button></div>`;
     } else if (l.status === 'ganho') {
       const vs = vendasDoLead(l.id).filter((v) => v.status === 'ativa');
       rodape = vs.map((v) => `<div class="venda-mini"><span>${esc(v.produto_nome)}</span><span class="nowrap">${num(v.valor_entrada) ? `<span class="muted">Entr.</span> <b>${brl(v.valor_entrada)}</b> · ` : ''}<b>${brl(v.valor_total)}</b></span></div>`).join('');
@@ -464,12 +529,22 @@
   }
 
   /* ----------------------------------------------------- WhatsApp */
+  const VARIAVEIS = [
+    ['{primeiro_nome}', 'Primeiro nome'], ['{nome}', 'Nome completo'], ['{usuario}', 'Nome do concierge'],
+    ['{cidade}', 'Cidade'], ['{link_upgrade}', 'Link do upgrade VIP'], ['{link_diagnostico}', 'Link do diagnóstico'],
+    ['{valor_upgrade}', 'Valor do upgrade'], ['{data_evento}', 'Data do evento']
+  ];
   function textoMensagem(tpl, l) {
+    const ev = S.links.evento ? String(S.links.evento).split('-').reverse().join('/') : '';
     return String(tpl || '')
       .replace(/\{primeiro_nome\}/g, primeiroNome(l.nome))
       .replace(/\{nome\}/g, l.nome || '')
       .replace(/\{usuario\}/g, primeiroNome(S.user.nome))
-      .replace(/\{cidade\}/g, l.cidade || '');
+      .replace(/\{cidade\}/g, l.cidade || '')
+      .replace(/\{link_upgrade\}/g, S.links.upgrade || '')
+      .replace(/\{link_diagnostico\}/g, S.links.diagnostico || '')
+      .replace(/\{valor_upgrade\}/g, 'R$ ' + (S.links.upgrade_valor || '50'))
+      .replace(/\{data_evento\}/g, ev);
   }
 
   function abrirWhats(id) {
@@ -477,9 +552,15 @@
     if (!l) return;
     const numero = waNumero(l.telefone);
     if (!numero) { toast('Este lead não tem telefone. Edite o lead para incluir.', 'erro'); return; }
-    const msgs = S.mensagens.filter((m) => m.ativo !== 'NAO' && (m.tipo_ingresso === 'todos' || !m.tipo_ingresso || m.tipo_ingresso === (l.tipo_ingresso || 'padrao')));
+    const f = faseDe(l);
+    const doTipo = S.mensagens.filter((m) => m.ativo !== 'NAO' && (m.tipo_ingresso === 'todos' || !m.tipo_ingresso || m.tipo_ingresso === (l.tipo_ingresso || 'padrao')));
+    const daFase = f ? doTipo.filter((m) => m.fase_id === f.id) : [];
+    const outras = doTipo.filter((m) => daFase.indexOf(m) < 0);
+    const msgs = daFase.concat(outras);
     let sel = msgs.length ? msgs[0].id : '';
-    const opcoes = msgs.map((m) => `
+    const opcoes = msgs.map((m, i) => `
+      ${i === 0 && daFase.length ? `<div class="label" style="margin:2px 0 6px">Mensagens da fase "${esc(f.nome)}"</div>` : ''}
+      ${i === daFase.length && daFase.length && outras.length ? '<div class="label" style="margin:10px 0 6px">Outras mensagens</div>' : ''}
       <label class="msg-opcao ${m.id === sel ? 'on' : ''}" data-msg="${m.id}">
         <b>${esc(m.titulo)}</b><p>${esc(textoMensagem(m.texto, l))}</p></label>`).join('') +
       `<label class="msg-opcao ${sel ? '' : 'on'}" data-msg=""><b>Sem mensagem pronta</b><p>Abre a conversa em branco</p></label>`;
@@ -594,6 +675,10 @@
         </div>
         ${!pode && st !== 'novo' ? `<p class="muted small">Este lead está com ${esc(l.responsavel_nome)}.</p>` : ''}
         ${acoes.length ? `<div class="acoes-grid">${acoes.join('')}</div>` : ''}
+
+        ${(pode && st === 'tratativa') || (st === 'tratativa' && souCoord()) ? blocoFase(l) : ''}
+        ${pode && st !== 'novo' ? blocoMarcos(l) : ''}
+
         <div class="info">${info.map(([k, v, c]) => `<div class="${c || ''}"><span>${k}</span><b>${esc(v)}</b></div>`).join('')}</div>
 
         ${vs.length ? `<div class="secao">Vendas</div>${vs.map((v) => `
@@ -604,9 +689,13 @@
             ${v.obs ? `<div class="small" style="margin-top:4px">${esc(v.obs)}</div>` : ''}
           </div>`).join('')}` : ''}
 
+        ${l.diagnostico_respostas ? blocoRespostas('Respostas do diagnóstico', l.diagnostico_respostas, l.diagnostico_em) : ''}
+        ${l.dados_extra ? blocoRespostas('Dados do cadastro / página de obrigado', l.dados_extra, '') : ''}
+        ${l.reuniao_obs ? `<div class="secao">Anotações da reunião</div><div class="cliente-box exmdl">${esc(l.reuniao_obs)}</div>` : ''}
+
         ${(l.cliente_mdl || l.cliente_ilu) ? `<div class="secao">Relacionamento com a 4blue</div>
-          ${l.cliente_mdl ? `<div class="cliente-box ${ehMdlAtivo(l) ? 'mdl' : 'exmdl'}"><b>MDL</b>${esc(l.cliente_mdl)}</div>` : ''}
-          ${l.cliente_ilu ? `<div class="cliente-box ilu"><b>Iluminismo</b>${esc(l.cliente_ilu)}</div>` : ''}` : ''}
+          ${(() => { const c = rotuloCliente(l.cliente_mdl, 'MDL'); return c ? `<div class="cliente-box ${c.cls}"><b>Máquina de Lucros — ${c.ativo ? 'cliente ativo' : 'não é mais cliente'}</b>${esc(l.cliente_mdl)}</div>` : ''; })()}
+          ${(() => { const c = rotuloCliente(l.cliente_ilu, 'ILU'); return c ? `<div class="cliente-box ${c.cls}"><b>Iluminismo — ${c.ativo ? 'cliente ativo' : 'não é mais cliente'}</b>${esc(l.cliente_ilu)}</div>` : ''; })()}` : ''}
 
         ${ev.length ? `<div class="secao">Eventos anteriores (${ev.length})</div>
           <div class="card" style="padding:4px 12px;box-shadow:none;border:1.5px solid var(--borda)">${ev.map((e) => `
@@ -628,10 +717,48 @@
     });
   }
 
+  function blocoFase(l) {
+    const f = faseDe(l);
+    return `
+      <div class="secao">Fase do funil</div>
+      <div class="card" style="box-shadow:none;border:1.5px solid var(--borda);border-left:4px solid ${f ? esc(f.cor) : 'var(--borda)'};padding:12px;margin-bottom:6px">
+        <div style="display:flex;align-items:center;gap:10px"><b style="flex:1">${f ? esc(f.nome) : 'Sem fase definida'}</b>
+          <button class="btn line sm" data-act="fase" data-id="${l.id}">${I.seta}Mover</button></div>
+        ${f && f.instrucoes ? `<ul class="inst">${String(f.instrucoes).split('\n').filter(Boolean).map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+        ${f && f.fase_em ? '' : ''}
+      </div>`;
+  }
+
+  function blocoMarcos(l) {
+    const linhas = Object.keys(MARCOS_INFO).map((k) => {
+      const info = MARCOS_INFO[k];
+      const v = info.vals[l[k]];
+      return `<button class="marco ${v ? 'on' : ''}" data-act="marco" data-id="${l.id}" data-campo="${k}">
+        <span class="mk-ic">${v ? I.check : I.mais}</span>
+        <span class="mk-txt"><b>${info.rot}</b><span>${v ? esc(v[0]) + (l[k + '_em'] ? ' · ' + fmtData(l[k + '_em'], false) : '') : 'marcar'}</span></span></button>`;
+    }).join('');
+    const links = [];
+    if (S.links.upgrade) links.push(`<button class="btn line sm wrap" data-act="copiar-upgrade">${I.copiar}Copiar link do upgrade VIP (R$ ${esc(S.links.upgrade_valor || '50')})</button>`);
+    if (S.links.diagnostico) links.push(`<button class="btn line sm wrap" data-act="copiar-diag">${I.copiar}Copiar link do diagnóstico</button>`);
+    return `<div class="secao">Marcos do lead</div><div class="marcos">${linhas}</div>
+      ${links.length ? `<div class="links-marco">${links.join('')}</div>` : ''}`;
+  }
+
+  function blocoRespostas(titulo, json, quando) {
+    let o;
+    try { o = JSON.parse(json); } catch (e) { return ''; }
+    if (!o || typeof o !== 'object') return '';
+    const itens = Object.keys(o).filter((k) => String(o[k]).trim());
+    if (!itens.length) return '';
+    return `<div class="secao">${esc(titulo)}${quando ? ' · ' + fmtData(quando) : ''}</div>
+      <div class="info">${itens.map((k) => `<div class="full"><span>${esc(k)}</span><b>${esc(o[k])}</b></div>`).join('')}</div>`;
+  }
+
   const ROT_ACAO = {
     criado: 'Lead criado', editado: 'Lead editado', tratativa_iniciada: 'Tratativa iniciada', whatsapp: 'WhatsApp aberto',
     ganho: 'Negócio ganho', perdido: 'Negócio perdido', reembolso: 'Reembolso', reaberto: 'Reaberto', nota: 'Anotação',
-    atribuido: 'Atribuído', liberado: 'Devolvido', venda_excluida: 'Venda excluída', importacao: 'Importação', excluido: 'Excluído'
+    atribuido: 'Atribuído', liberado: 'Devolvido', venda_excluida: 'Venda excluída', importacao: 'Importação', excluido: 'Excluído',
+    fase: 'Mudou de fase', marco: 'Marco', distribuicao: 'Distribuição de leads'
   };
 
   async function carregarHistorico(id, sh) {
@@ -688,6 +815,71 @@
         });
       }
     });
+  }
+
+  function abrirFase(id) {
+    const l = S.leads.find((x) => x.id === id);
+    if (!l) return;
+    const fases = fasesAtivas();
+    abrirSheet({
+      titulo: 'Mover de fase',
+      corpo: `
+        <p class="muted small" style="margin:0 0 12px">${esc(l.nome)}</p>
+        ${fases.map((f) => `
+          <button class="fase-opcao ${f.id === l.fase_id ? 'on' : ''}" data-fase="${f.id}" style="border-left-color:${esc(f.cor)}">
+            <b>${esc(f.nome)}</b>${f.id === l.fase_id ? '<span class="tag ok">Fase atual</span>' : ''}
+            ${f.instrucoes ? `<ul>${String(f.instrucoes).split('\n').filter(Boolean).map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+          </button>`).join('') || '<p class="muted">Nenhuma fase cadastrada. O coordenador cria as fases em Produtos e msgs.</p>'}`,
+      onMount: (sh) => {
+        sh.querySelectorAll('[data-fase]').forEach((b) => b.addEventListener('click', (ev) => comBotao(ev.currentTarget, async () => {
+          atualizaLead(await api('lead.fase', { id, fase_id: b.dataset.fase }));
+          fecharSheet();
+          toast('Lead movido de fase', 'ok');
+          renderMain();
+        })));
+      }
+    });
+  }
+
+  function abrirMarco(id, campo) {
+    const l = S.leads.find((x) => x.id === id);
+    if (!l) return;
+    const info = MARCOS_INFO[campo];
+    const opcoes = Object.keys(info.vals);
+    const ehReuniao = campo === 'reuniao';
+    abrirSheet({
+      titulo: info.rot,
+      corpo: `
+        <p class="muted small" style="margin:0 0 12px">${esc(l.nome)}</p>
+        <div class="motivos">${opcoes.map((v) => `<button class="chip ${l[campo] === v ? 'on' : ''}" data-v="${v}">${esc(info.vals[v][0])}</button>`).join('')}
+          ${l[campo] ? '<button class="chip" data-v="">Limpar</button>' : ''}</div>
+        ${ehReuniao ? `<div class="field"><label>Anotações da reunião</label><textarea class="input" id="mk-obs" rows="3">${esc(l.reuniao_obs || '')}</textarea></div>` : ''}
+        ${campo === 'upgrade' && S.links.upgrade ? `<div class="secao">Link do upgrade (R$ ${esc(S.links.upgrade_valor || '50')})</div>
+          <div class="copiar"><input class="input" readonly value="${esc(S.links.upgrade)}" id="mk-link"><button class="btn navy" data-copiar="mk-link">${I.copiar}</button></div>` : ''}
+        ${campo === 'diagnostico' && S.links.diagnostico ? `<div class="secao">Link do diagnóstico</div>
+          <div class="copiar"><input class="input" readonly value="${esc(S.links.diagnostico)}" id="mk-link2"><button class="btn navy" data-copiar="mk-link2">${I.copiar}</button></div>` : ''}`,
+      onMount: (sh) => {
+        sh.querySelectorAll('[data-copiar]').forEach((b) => b.addEventListener('click', () => copiarTexto(sh.querySelector('#' + b.dataset.copiar).value)));
+        sh.querySelectorAll('[data-v]').forEach((b) => b.addEventListener('click', (ev) => comBotao(ev.currentTarget, async () => {
+          const obs = sh.querySelector('#mk-obs');
+          atualizaLead(await api('lead.marco', { id, campo, valor: b.dataset.v, obs: obs ? obs.value : undefined }));
+          fecharSheet();
+          toast(info.rot + ' atualizado', 'ok');
+          renderMain();
+        })));
+      }
+    });
+  }
+
+  function copiarTexto(txt) {
+    const fim = () => toast('Copiado!', 'ok');
+    if (navigator.clipboard) navigator.clipboard.writeText(txt).then(fim).catch(() => fim());
+    else {
+      const ta = document.createElement('textarea');
+      ta.value = txt; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch (e) { /* ignora */ }
+      ta.remove(); fim();
+    }
   }
 
   function abrirGanho(id) {
@@ -971,6 +1163,38 @@
         </section>
 
         <section class="card bloco">
+          <h3>Funil por fase <span class="muted">leads em tratativa</span></h3>
+          ${(() => {
+            const emTrat = leads.filter((l) => l.status === 'tratativa');
+            const fs = fasesAtivas();
+            const semFase = emTrat.filter((l) => !l.fase_id).length;
+            const maxF = Math.max(1, ...fs.map((f) => emTrat.filter((l) => l.fase_id === f.id).length), semFase);
+            return fs.map((f) => {
+              const n = emTrat.filter((l) => l.fase_id === f.id).length;
+              const parados = emTrat.filter((l) => l.fase_id === f.id && horasDesde(l.ultima_acao || l.inicio_tratativa) > 48).length;
+              return barra(esc(f.nome), n, maxF, n + (parados ? ` · <span style="color:var(--vermelho)">${parados} parados</span>` : ''), f.cor);
+            }).join('') + (semFase ? barra('Sem fase', semFase, maxF, String(semFase), '#C7D0DB') : '')
+              + (fs.length ? '' : '<p class="muted small">Cadastre as fases em Produtos e msgs.</p>');
+          })()}
+        </section>
+
+        <section class="card bloco">
+          <h3>Marcos da jornada</h3>
+          ${(() => {
+            const total = leads.length || 1;
+            const itens = [
+              ['Confirmaram presença', leads.filter((l) => l.confirmado === 'sim').length, '#F8B90C'],
+              ['Fizeram upgrade VIP', leads.filter((l) => l.upgrade === 'feito').length, '#7A4CC2'],
+              ['Link do upgrade enviado', leads.filter((l) => l.upgrade === 'enviado').length, '#B39DDB'],
+              ['Diagnóstico respondido', leads.filter((l) => l.diagnostico === 'feito').length, '#0B7A9E'],
+              ['Reunião realizada', leads.filter((l) => l.reuniao === 'feita').length, '#C2410C'],
+              ['Participaram do Workshop', leads.filter((l) => l.checkin === 'sim').length, '#12A150']
+            ];
+            return itens.map(([r, n, cor]) => barra(r, n, total, `${n} · ${pct(n, total)}`, cor)).join('');
+          })()}
+        </section>
+
+        <section class="card bloco">
           <h3>Vendas por produto</h3>
           <div class="legenda"><span><i style="background:var(--azul)"></i>Total</span><span><i style="background:var(--amarelo)"></i>Entrada</span></div>
           ${prods.length ? prods.map(([n, p]) => barra(esc(n) + ` <span class="muted">(${p.n})</span>`, p.total - p.ent, maxProd, `${brlCurto(p.ent)} / <b>${brlCurto(p.total)}</b>`, null, p.ent)).join('') : '<p class="muted small">Nenhuma venda ainda.</p>'}
@@ -1066,14 +1290,19 @@
   function viewEquipe() {
     const us = S.usuarios.slice().sort((a, b) => (a.ativo === 'NAO') - (b.ativo === 'NAO') || a.nome.localeCompare(b.nome));
     return `
-      <div class="page-head"><h2>Equipe</h2><div class="acoes"><button class="btn sm amarelo" data-act="novo-usuario">${I.mais}Usuário</button></div></div>
+      <div class="page-head"><h2>Equipe de concierges</h2>
+        <div class="acoes">
+          <button class="btn sm line" data-act="distribuir">${I.troca}Distribuir</button>
+          <button class="btn sm amarelo" data-act="novo-usuario">${I.mais}Concierge</button>
+        </div></div>
+      <p class="small muted" style="margin:-6px 0 12px">${S.leads.filter((l) => l.status === 'novo' && !l.responsavel_id).length} leads sem concierge · distribuição automática ${S.config.distribuicao_auto ? '<b style="color:var(--verde)">ligada</b>' : 'desligada (ligue em Ajustes)'}</p>
       <div class="card lista-simples">${us.map((u) => {
         const ls = S.leads.filter((l) => l.responsavel_id === u.id);
         const s = statsDe(ls, S.vendas.filter((v) => v.usuario_id === u.id));
         return `<div class="item-linha" data-act="editar-usuario" data-id="${u.id}" style="cursor:pointer;${u.ativo === 'NAO' ? 'opacity:.5' : ''}">
           ${avatarHtml(u)}
           <div class="grow"><b>${esc(u.nome)}</b><span>${esc(u.email)}</span>
-            <div class="tags" style="margin-top:4px">${u.perfil === 'coordenador' ? '<span class="tag vip">Coordenador</span>' : '<span class="tag padrao">Usuário</span>'}${u.ativo === 'NAO' ? '<span class="tag alerta">Inativo</span>' : ''}
+            <div class="tags" style="margin-top:4px">${u.perfil === 'coordenador' ? '<span class="tag vip">Coordenador</span>' : '<span class="tag padrao">Concierge</span>'}${u.ativo === 'NAO' ? '<span class="tag alerta">Inativo</span>' : ''}${u.perfil === 'coordenador' && u.recebe_leads === 'SIM' ? '<span class="tag ok">Recebe leads</span>' : ''}
             <span class="tag">${s.tratativa} em tratativa</span><span class="tag ok">${s.ganho} ganhos · ${brlCurto(s.receita)}</span></div></div>
           <span class="muted">${I.editar.replace('<svg', '<svg width="18" height="18"')}</span></div>`;
       }).join('')}</div>`;
@@ -1093,13 +1322,18 @@
             <div class="field"><label>Perfil</label><select class="input" name="perfil"><option value="usuario">Usuário</option><option value="coordenador" ${u.perfil === 'coordenador' ? 'selected' : ''}>Coordenador</option></select></div>
             <div class="field"><label>Acesso</label><select class="input" name="ativo"><option value="SIM">Ativo</option><option value="NAO" ${u.ativo === 'NAO' ? 'selected' : ''}>Bloqueado</option></select></div>
           </div>
+          <label class="check"><input type="checkbox" name="recebe_leads" ${u.recebe_leads === 'SIM' ? 'checked' : ''}><span>Entra na divisão de leads (concierges entram sempre; marque só se o coordenador também for atender)</span></label>
           <p class="hint">Envie o e-mail e a senha para a pessoa. Ela poderá trocar nome e foto, mas não e-mail e senha.</p>
         </form>`,
       rodape: `<button class="btn line" data-x>Cancelar</button><button class="btn amarelo" id="u-salvar" data-loading=" Salvando...">Salvar</button>`,
       onMount: (sh) => {
         sh.querySelector('#u-salvar').addEventListener('click', (ev) => comBotao(ev.currentTarget, async () => {
           const f = sh.querySelector('#f-u');
-          const dados = { id: id || '', nome: f.elements.nome.value, email: f.elements.email.value, senha: f.elements.senha.value, perfil: f.elements.perfil.value, ativo: f.elements.ativo.value };
+          const dados = {
+            id: id || '', nome: f.elements.nome.value, email: f.elements.email.value, senha: f.elements.senha.value,
+            perfil: f.elements.perfil.value, ativo: f.elements.ativo.value,
+            recebe_leads: (f.elements.perfil.value !== 'coordenador' || f.elements.recebe_leads.checked) ? 'SIM' : 'NAO'
+          };
           const r = await api('admin.usuario.salvar', { usuario: dados });
           const i = S.usuarios.findIndex((x) => x.id === r.id);
           if (i >= 0) S.usuarios[i] = r; else S.usuarios.push(r);
@@ -1115,7 +1349,19 @@
   function viewCatalogo() {
     const aba = S.catalogo;
     let corpo;
-    if (aba === 'produtos') {
+    if (aba === 'fases') {
+      const fs = S.fases.slice().sort((a, b) => num(a.ordem) - num(b.ordem));
+      corpo = fs.length ? `<div class="card lista-simples">${fs.map((f) => `
+        <div class="item-linha" data-act="editar-fase" data-id="${f.id}" style="cursor:pointer;${f.ativo === 'NAO' ? 'opacity:.5' : ''};border-left:4px solid ${esc(f.cor)}">
+          <div class="grow"><b>${num(f.ordem)}. ${esc(f.nome)}</b>
+            <span>${esc(String(f.instrucoes || '').split('\n').filter(Boolean).join(' · ') || 'sem lembretes')}</span>
+            <div class="tags" style="margin-top:4px">
+              <span class="tag">${S.leads.filter((l) => l.fase_id === f.id).length} leads</span>
+              <span class="tag">${S.mensagens.filter((m) => m.fase_id === f.id).length} mensagens</span>
+              ${f.ativo === 'NAO' ? '<span class="tag alerta">Inativa</span>' : ''}</div></div>
+          <span class="muted">${I.editar.replace('<svg', '<svg width="18" height="18"')}</span></div>`).join('')}</div>`
+        : '<div class="vazio"><h3>Nenhuma fase</h3><p>Crie as fases do funil que os concierges vão seguir.</p></div>';
+    } else if (aba === 'produtos') {
       const ps = S.produtos.slice().sort((a, b) => (a.ativo === 'NAO') - (b.ativo === 'NAO') || a.nome.localeCompare(b.nome));
       corpo = ps.length ? `<div class="card lista-simples">${ps.map((p) => `
         <div class="item-linha" data-act="editar-produto" data-id="${p.id}" style="cursor:pointer;${p.ativo === 'NAO' ? 'opacity:.5' : ''}">
@@ -1138,10 +1384,57 @@
         : '<div class="vazio"><h3>Nenhuma mensagem</h3><p>Crie mensagens prontas para a equipe iniciar as conversas.</p></div>';
     }
     return `
-      <div class="page-head"><h2>${aba === 'produtos' ? 'Produtos' : 'Mensagens prontas'}</h2>
-        <div class="acoes"><button class="btn sm amarelo" data-act="${aba === 'produtos' ? 'novo-produto' : 'nova-mensagem'}">${I.mais}${aba === 'produtos' ? 'Produto' : 'Mensagem'}</button></div></div>
-      <div class="seg" style="margin-bottom:14px"><button data-cat="produtos" class="${aba === 'produtos' ? 'on' : ''}">Produtos (${S.produtos.length})</button><button data-cat="mensagens" class="${aba === 'mensagens' ? 'on' : ''}">Mensagens (${S.mensagens.length})</button></div>
+      <div class="page-head"><h2>${{ fases: 'Fases do funil', produtos: 'Produtos', mensagens: 'Mensagens prontas' }[aba]}</h2>
+        <div class="acoes"><button class="btn sm amarelo" data-act="${{ fases: 'nova-fase', produtos: 'novo-produto', mensagens: 'nova-mensagem' }[aba]}">${I.mais}${{ fases: 'Fase', produtos: 'Produto', mensagens: 'Mensagem' }[aba]}</button></div></div>
+      <div class="seg" style="margin-bottom:14px"><button data-cat="fases" class="${aba === 'fases' ? 'on' : ''}">Fases (${S.fases.length})</button><button data-cat="produtos" class="${aba === 'produtos' ? 'on' : ''}">Produtos (${S.produtos.length})</button><button data-cat="mensagens" class="${aba === 'mensagens' ? 'on' : ''}">Mensagens (${S.mensagens.length})</button></div>
       ${corpo}`;
+  }
+
+  function abrirFormFase(id) {
+    const f = id ? S.fases.find((x) => x.id === id) : { cor: '#0369B1', ativo: 'SIM', ordem: String(S.fases.length + 1) };
+    if (!f) return;
+    const cores = ['#0369B1', '#F8B90C', '#7A4CC2', '#0B7A9E', '#C2410C', '#12A150', '#D93B3B', '#011527'];
+    abrirSheet({
+      titulo: id ? 'Editar fase' : 'Nova fase',
+      corpo: `
+        <form id="f-f">
+          <div class="field"><label>Nome da fase *</label><input class="input" name="nome" value="${esc(f.nome || '')}"></div>
+          <div class="field"><label>Lembretes: o que o concierge deve fazer nesta fase (um por linha)</label>
+            <textarea class="input" name="instrucoes" rows="5" placeholder="Confirmar presença&#10;Enviar o link do diagnóstico">${esc(f.instrucoes || '')}</textarea></div>
+          <div class="field"><label>Cor</label><div class="cores" id="f-cores">${cores.map((c) => `<button type="button" data-cor="${c}" class="${(f.cor || '').toLowerCase() === c.toLowerCase() ? 'on' : ''}" style="background:${c}"></button>`).join('')}</div></div>
+          <div class="row">
+            <div class="field" style="max-width:110px"><label>Ordem</label><input class="input" name="ordem" inputmode="numeric" value="${esc(f.ordem || '')}"></div>
+            <div class="field"><label>Status</label><select class="input" name="ativo"><option value="SIM">Ativa</option><option value="NAO" ${f.ativo === 'NAO' ? 'selected' : ''}>Inativa</option></select></div>
+          </div>
+          ${id ? `<button type="button" class="btn line sm" id="f-del" style="color:var(--vermelho)">${I.lixo}Excluir fase</button>` : ''}
+        </form>`,
+      rodape: `<button class="btn line" data-x>Cancelar</button><button class="btn amarelo" id="f-ok" data-loading=" Salvando...">Salvar</button>`,
+      onMount: (sh) => {
+        let cor = f.cor || '#0369B1';
+        sh.querySelectorAll('[data-cor]').forEach((b) => b.addEventListener('click', () => {
+          cor = b.dataset.cor;
+          sh.querySelectorAll('[data-cor]').forEach((x) => x.classList.toggle('on', x === b));
+        }));
+        const del = sh.querySelector('#f-del');
+        if (del) del.addEventListener('click', (ev) => {
+          if (!confirm('Excluir esta fase? Os leads precisam estar em outras fases.')) return;
+          comBotao(ev.currentTarget, async () => {
+            await api('admin.fase.excluir', { id });
+            S.fases = S.fases.filter((x) => x.id !== id);
+            fecharSheet(); toast('Fase excluída', 'ok'); renderMain();
+          });
+        });
+        sh.querySelector('#f-ok').addEventListener('click', (ev) => comBotao(ev.currentTarget, async () => {
+          const fo = sh.querySelector('#f-f');
+          const dados = { id: id || '', cor: cor };
+          ['nome', 'instrucoes', 'ordem', 'ativo'].forEach((k) => { dados[k] = fo.elements[k].value; });
+          const r = await api('admin.fase.salvar', { fase: dados });
+          const i = S.fases.findIndex((x) => x.id === r.id);
+          if (i >= 0) S.fases[i] = Object.assign({}, S.fases[i], r); else S.fases.push(r);
+          fecharSheet(); toast('Fase salva', 'ok'); renderMain();
+        }));
+      }
+    });
   }
 
   function abrirFormProduto(id) {
@@ -1193,10 +1486,12 @@
           <div class="field"><label>Título (a equipe vê este nome) *</label><input class="input" name="titulo" value="${esc(m.titulo || '')}"></div>
           <div class="field"><label>Texto *</label><textarea class="input" name="texto" rows="6">${esc(m.texto || '')}</textarea></div>
           <div class="var-chips"><span class="small muted">Inserir:</span>
-            <button type="button" data-var="{primeiro_nome}">Primeiro nome</button><button type="button" data-var="{nome}">Nome completo</button>
-            <button type="button" data-var="{usuario}">Nome do atendente</button><button type="button" data-var="{cidade}">Cidade</button></div>
+            ${VARIAVEIS.map(([v, r]) => `<button type="button" data-var="${v}">${r}</button>`).join('')}</div>
           <div class="label" style="margin-bottom:6px">Pré-visualização</div>
           <div class="preview-msg" id="m-prev"></div>
+          <div class="field"><label>Fase do funil</label><select class="input" name="fase_id">
+            <option value="">Qualquer fase</option>${fasesAtivas().map((f) => `<option value="${f.id}" ${m.fase_id === f.id ? 'selected' : ''}>${esc(f.nome)}</option>`).join('')}</select></div>
+          <p class="hint">A mensagem da fase aparece primeiro no botão do WhatsApp quando o lead está nela.</p>
           <div class="row">
             <div class="field"><label>Usar para</label><select class="input" name="tipo_ingresso">
               <option value="todos">Todos os leads</option><option value="padrao" ${m.tipo_ingresso === 'padrao' ? 'selected' : ''}>Só ingresso Padrão</option><option value="vip" ${m.tipo_ingresso === 'vip' ? 'selected' : ''}>Só ingresso VIP</option></select></div>
@@ -1228,7 +1523,7 @@
         });
         sh.querySelector('#m-ok').addEventListener('click', (ev) => comBotao(ev.currentTarget, async () => {
           const dados = { id: id || '' };
-          ['titulo', 'texto', 'tipo_ingresso', 'ordem', 'ativo'].forEach((k) => { dados[k] = f.elements[k].value; });
+          ['titulo', 'texto', 'tipo_ingresso', 'fase_id', 'ordem', 'ativo'].forEach((k) => { dados[k] = f.elements[k].value; });
           const r = await api('admin.mensagem.salvar', { mensagem: dados });
           const i = S.mensagens.findIndex((x) => x.id === r.id);
           if (i >= 0) S.mensagens[i] = Object.assign({}, S.mensagens[i], r); else S.mensagens.push(r);
@@ -1275,6 +1570,34 @@
           <p class="small muted">Última sincronização: <b>${c.ultima_sincronizacao ? fmtData(c.ultima_sincronizacao) : 'nunca'}</b></p>
           <div class="row"><button class="btn line sm" data-act="salvar-config" data-loading=" Salvando...">Salvar ID</button>
           <button class="btn navy sm" data-act="sincronizar" data-loading=" Sincronizando...">${I.refresh}Sincronizar agora</button></div>
+        </section>
+
+        <section class="card bloco">
+          <h3>Links e funil</h3>
+          <p class="small muted" style="margin-top:-6px">Estes links aparecem nos botões de copiar e nas variáveis das mensagens (<code>{link_upgrade}</code>, <code>{link_diagnostico}</code>).</p>
+          <div class="row">
+            <div class="field"><label>Link do upgrade para VIP</label><input class="input" id="cfg-upg" value="${esc(c.upgrade_url || '')}" placeholder="https://pay.hotmart.com/..."></div>
+            <div class="field" style="max-width:120px"><label>Valor (R$)</label><input class="input" id="cfg-upg-val" inputmode="decimal" value="${esc(c.upgrade_valor || '50')}"></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Link do diagnóstico</label><input class="input" id="cfg-diag" value="${esc(c.diagnostico_url || '')}"></div>
+            <div class="field" style="max-width:170px"><label>Data do evento</label><input class="input" id="cfg-evento" type="date" value="${esc(c.evento_data || '')}"></div>
+          </div>
+          <label class="check"><input type="checkbox" id="cfg-dist" ${c.distribuicao_auto ? 'checked' : ''}><span><b>Distribuir automaticamente:</b> todo lead novo já entra para um concierge (o que tem menos leads em aberto). O coordenador só entra na fila se estiver marcado em Equipe.</span></label>
+          <button class="btn line sm" data-act="salvar-config" data-loading=" Salvando...">Salvar</button>
+        </section>
+
+        <section class="card bloco">
+          <h3>Dados de fora (diagnóstico, obrigado, check-in)</h3>
+          <p class="small muted" style="margin-top:-6px">Use esta URL como webhook no formulário do diagnóstico, na automação da página de obrigado ou em qualquer ferramenta (Zapier, Make, ActiveCampaign). Troque <code>tipo=diagnostico</code> por <code>obrigado</code>, <code>confirmacao</code> ou <code>checkin</code>. O sistema casa a pessoa por e-mail ou telefone.</p>
+          <div class="copiar" style="margin-bottom:12px"><input class="input" readonly value="${esc(c.webhook_dados || '')}" id="wd-url"><button class="btn navy" data-act="copiar-dados">Copiar</button></div>
+          <div class="secao">Importar por planilha</div>
+          <div class="row" style="flex-wrap:wrap">
+            <button class="btn line sm" data-act="imp-checkin">${I.upload}Check-in do evento</button>
+            <button class="btn line sm" data-act="imp-confirmacao">${I.upload}Confirmações</button>
+            <button class="btn line sm" data-act="imp-diagnostico">${I.upload}Diagnóstico</button>
+            <button class="btn line sm" data-act="imp-obrigado">${I.upload}Página de obrigado</button>
+          </div>
         </section>
 
         <section class="card bloco">
@@ -1549,6 +1872,94 @@
     });
   }
 
+  /* ---------------- importação de check-in / confirmações / diagnóstico / dados */
+  const IMP_MARCOS = {
+    checkin: ['Check-in do evento', 'Lista de quem passou no credenciamento. Marca "Participou do Workshop" em cada lead encontrado.'],
+    confirmacao: ['Confirmações de presença', 'Lista de quem confirmou presença. Marca "Confirmou presença".'],
+    diagnostico: ['Respostas do diagnóstico', 'Planilha de respostas do formulário. Marca o diagnóstico como feito e guarda as respostas no card do lead.'],
+    obrigado: ['Dados da página de obrigado', 'Planilha com os dados extras (ActiveCampaign, formulário do obrigado). Preenche empresa, cargo e faturamento quando estiverem vazios e guarda o resto no card.']
+  };
+
+  function abrirImportarMarcos(tipo) {
+    const [titulo, texto] = IMP_MARCOS[tipo];
+    let dados = null, iCab = 0, cab = [], mapa = {}, linhas = [];
+    const guarda = tipo === 'diagnostico' || tipo === 'obrigado';
+    abrirSheet({
+      titulo: titulo,
+      largo: true,
+      corpo: `
+        <p class="small muted" style="margin-top:0">${texto} A pessoa é encontrada por <b>e-mail</b> ou <b>telefone</b>.</p>
+        <div class="field"><label>Arquivo (.csv, .xlsx, .xls)</label><input class="input" type="file" accept=".csv,.xlsx,.xls,.ods,text/csv" id="mi-arq"></div>
+        <div id="mi-map"></div>
+        <div id="mi-prev" class="small"></div>`,
+      rodape: `<button class="btn line" data-x>Cancelar</button><button class="btn line" id="mi-sim" disabled data-loading=" Conferindo...">Simular</button><button class="btn amarelo" id="mi-ok" disabled data-loading=" Importando...">Importar</button>`,
+      onMount: (sh) => {
+        const $map = sh.querySelector('#mi-map'), prev = sh.querySelector('#mi-prev');
+        const ok = sh.querySelector('#mi-ok'), sim = sh.querySelector('#mi-sim');
+        const campos = [['email', 'E-mail'], ['telefone', 'Telefone'], ['nome', 'Nome (só para conferir)']];
+        const pintar = () => {
+          const ops = (sel) => '<option value="-1">— não usar —</option>' + cab.map((c, i) => `<option value="${i}" ${sel === i ? 'selected' : ''}>${esc(c || '(coluna ' + (i + 1) + ')')}</option>`).join('');
+          $map.innerHTML = `<div class="secao" style="margin-top:4px">Confira as colunas</div>
+            <div class="row" style="flex-wrap:wrap">${campos.map(([k, r]) => `<div class="field" style="min-width:200px"><label>${r}</label><select class="input" data-map="${k}">${ops(mapa[k])}</select></div>`).join('')}</div>
+            ${guarda ? '<p class="hint">As outras colunas da planilha entram como respostas no card do lead.</p>' : ''}`;
+          $map.querySelectorAll('select[data-map]').forEach((sel) => sel.addEventListener('change', () => { mapa[sel.dataset.map] = Number(sel.value); montar(); }));
+        };
+        const montar = () => {
+          const v = (r, k) => (mapa[k] >= 0 ? String(r[mapa[k]] || '').trim() : '');
+          linhas = [];
+          dados.slice(iCab + 1).forEach((r) => {
+            const email = v(r, 'email'), tel = v(r, 'telefone');
+            if (!email && !tel) return;
+            const item = { email, telefone: tel, nome: v(r, 'nome') };
+            if (guarda) {
+              const respostas = {};
+              cab.forEach((c, i) => {
+                if ([mapa.email, mapa.telefone].indexOf(i) >= 0) return;
+                const val = String(r[i] || '').trim();
+                if (c && val) respostas[c] = val;
+              });
+              item.respostas = respostas;
+            }
+            linhas.push(item);
+          });
+          prev.innerHTML = `<div class="card" style="padding:12px;box-shadow:none;border:1.5px solid var(--borda)">
+            <b>${linhas.length} linhas com contato</b><div class="muted">${dados.length - iCab - 1} linhas no arquivo</div>
+            ${linhas.slice(0, 3).map((l) => `<div style="margin-top:4px">• ${esc(l.nome || '')} ${esc(l.email || telFmt(l.telefone))}${l.respostas ? ` <span class="muted">(${Object.keys(l.respostas).length} respostas)</span>` : ''}</div>`).join('')}</div>
+            <div id="mi-res"></div>`;
+          ok.disabled = sim.disabled = !linhas.length;
+        };
+        sh.querySelector('#mi-arq').addEventListener('change', async (e) => {
+          const f = e.target.files[0]; if (!f) return;
+          prev.textContent = 'Lendo arquivo…';
+          try {
+            dados = await lerArquivoTabela(f);
+            if (dados.length < 2) throw new Error('Arquivo sem linhas.');
+            iCab = acharCabecalho(dados);
+            cab = dados[iCab];
+            const det = detectarColunas(cab);
+            mapa = { email: det.email, telefone: det.telefone, nome: det.nome };
+            pintar(); montar();
+          } catch (err) { prev.textContent = 'Não consegui ler o arquivo: ' + err.message; ok.disabled = sim.disabled = true; }
+        });
+        const enviar = (simular) => async () => {
+          const r = await api('admin.importar.marcos', { tipo, linhas, simular });
+          const box = sh.querySelector('#mi-res');
+          const txt = `${r.encontrados} leads encontrados · ${r.nao_encontrados} não estão no sistema`;
+          if (simular) {
+            box.innerHTML = `<div class="cliente-box exmdl" style="margin-top:10px"><b>Simulação (nada foi gravado)</b>${txt}
+              ${r.exemplos_nao_encontrados.length ? `<div class="small" style="margin-top:6px">Não encontrados: ${esc(r.exemplos_nao_encontrados.join(', '))}</div>` : ''}</div>`;
+            return;
+          }
+          fecharSheet();
+          toast(`${r.atualizados} leads atualizados · ${r.nao_encontrados} não encontrados`, 'ok');
+          await carregar();
+        };
+        sim.addEventListener('click', (ev) => comBotao(ev.currentTarget, enviar(true)));
+        ok.addEventListener('click', (ev) => comBotao(ev.currentTarget, enviar(false)));
+      }
+    });
+  }
+
   /* ---------------- importação direta pela API da Hotmart */
   function abrirHotmartApi() {
     const st = (S.config && S.config.hotmart_api) || {};
@@ -1610,6 +2021,11 @@
       case 'abrir': abrirLead(id); break;
       case 'editar': abrirFormLead(id); break;
       case 'ganho': abrirGanho(id); break;
+      case 'fase': abrirFase(id); break;
+      case 'marco': abrirMarco(id, el.dataset.campo); break;
+      case 'copiar-upgrade': copiarTexto(S.links.upgrade); break;
+      case 'copiar-diag': copiarTexto(S.links.diagnostico); break;
+      case 'ver-funil': S.funilLista = !S.funilLista; renderMain(); break;
       case 'perdido': abrirMotivo(id, 'perdido'); break;
       case 'reembolso': abrirMotivo(id, 'reembolso'); break;
       case 'novo-lead': abrirFormLead(); break;
@@ -1661,11 +2077,29 @@
       case 'hotmart-api': abrirHotmartApi(); break;
       case 'novo-usuario': abrirFormUsuario(); break;
       case 'editar-usuario': abrirFormUsuario(id); break;
+      case 'nova-fase': abrirFormFase(); break;
+      case 'editar-fase': abrirFormFase(id); break;
+      case 'distribuir':
+        comBotao(el, async () => {
+          const prev = await api('admin.distribuir', { simular: true });
+          if (!prev.distribuidos) { toast('Não há leads sem concierge.', 'erro'); return; }
+          const txt = Object.entries(prev.por_usuario).map(([k, n]) => `${k}: ${n}`).join(' · ');
+          if (!confirm(`Distribuir ${prev.distribuidos} leads entre ${prev.concierges} concierges?\n\n${txt}`)) return;
+          const r = await api('admin.distribuir', {});
+          toast(`${r.distribuidos} leads distribuídos`, 'ok');
+          await carregar();
+        });
+        break;
       case 'novo-produto': abrirFormProduto(); break;
       case 'editar-produto': abrirFormProduto(id); break;
       case 'nova-mensagem': abrirFormMensagem(); break;
       case 'editar-mensagem': abrirFormMensagem(id); break;
       case 'sair': api('logout').catch(() => {}); sairLocal(); break;
+      case 'copiar-dados': copiarTexto(document.getElementById('wd-url').value); break;
+      case 'imp-checkin': abrirImportarMarcos('checkin'); break;
+      case 'imp-confirmacao': abrirImportarMarcos('confirmacao'); break;
+      case 'imp-diagnostico': abrirImportarMarcos('diagnostico'); break;
+      case 'imp-obrigado': abrirImportarMarcos('obrigado'); break;
       case 'copiar': {
         const inp = document.getElementById('wh-url');
         (navigator.clipboard ? navigator.clipboard.writeText(inp.value) : Promise.reject()).then(() => toast('URL copiada', 'ok')).catch(() => { inp.select(); document.execCommand('copy'); toast('URL copiada', 'ok'); });
@@ -1673,7 +2107,11 @@
       }
       case 'salvar-config':
         comBotao(el, async () => {
-          S.config = await api('admin.config', { config: { HOTMART_ID_PADRAO: document.getElementById('cfg-pad').value, HOTMART_ID_VIP: document.getElementById('cfg-vip').value, BASE_CLIENTES_ID: document.getElementById('cfg-base').value, HOTMART_MODO_TESTE: document.getElementById('cfg-teste').checked ? 'SIM' : 'NAO' } });
+          S.config = await api('admin.config', { config: { HOTMART_ID_PADRAO: document.getElementById('cfg-pad').value, HOTMART_ID_VIP: document.getElementById('cfg-vip').value, BASE_CLIENTES_ID: document.getElementById('cfg-base').value, HOTMART_MODO_TESTE: document.getElementById('cfg-teste').checked ? 'SIM' : 'NAO',
+            UPGRADE_VIP_URL: document.getElementById('cfg-upg').value.trim(), UPGRADE_VIP_VALOR: document.getElementById('cfg-upg-val').value.trim(),
+            DIAGNOSTICO_URL: document.getElementById('cfg-diag').value.trim(), EVENTO_DATA: document.getElementById('cfg-evento').value,
+            DISTRIBUICAO_AUTO: document.getElementById('cfg-dist').checked ? 'SIM' : 'NAO' } });
+          S.links = { upgrade: S.config.upgrade_url, upgrade_valor: S.config.upgrade_valor, diagnostico: S.config.diagnostico_url, evento: S.config.evento_data };
           toast('Configurações salvas', 'ok');
           renderMain();
         });
