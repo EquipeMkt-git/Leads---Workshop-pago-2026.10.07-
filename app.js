@@ -1278,10 +1278,14 @@
         </section>
 
         <section class="card bloco">
-          <h3>Importar e exportar</h3>
-          <p class="small muted" style="margin-top:-6px">Importe compras que entraram antes do webhook (CSV exportado da Hotmart ou planilha com nome, e-mail e telefone). Duplicados são ignorados.</p>
+          <h3>Compras antigas (antes do sistema)</h3>
+          <p class="small muted" style="margin-top:-6px">Traga quem comprou o ingresso antes do webhook estar ligado. Quem já está no sistema é ignorado.</p>
+          <div class="row" style="flex-wrap:wrap;margin-bottom:10px">
+            <button class="btn navy sm" data-act="hotmart-api">${I.download}Puxar da Hotmart (API)</button>
+            <button class="btn line sm" data-act="importar">${I.upload}Importar planilha (CSV/Excel)</button>
+          </div>
+          <div class="secao">Exportar</div>
           <div class="row" style="flex-wrap:wrap">
-            <button class="btn line sm" data-act="importar">${I.upload}Importar CSV</button>
             <button class="btn line sm" data-act="exportar">${I.download}Leads (CSV)</button>
             <button class="btn line sm" data-act="exportar-vendas">${I.download}Vendas (CSV)</button>
           </div>
@@ -1353,64 +1357,244 @@
     return linhas.filter((r) => r.some((c) => String(c).trim()));
   }
 
+  /* ---------------- importação de planilha (CSV / Excel) com mapeamento */
+  const CAMPOS_IMP = [
+    ['nome', 'Nome do comprador *'], ['email', 'E-mail'], ['telefone', 'Telefone / WhatsApp'], ['ddd', 'DDD (se vier separado)'],
+    ['cidade', 'Cidade'], ['transacao', 'Transação'], ['produto', 'Produto / ID do produto'], ['status', 'Status da compra'], ['data', 'Data da compra']
+  ];
+  const RUIM_NOME = /produto|afiliad|produtor|oferta|plano|coprodu|cupom|moeda|pagamento|parcela|origem|src|sck/;
+  function pontuaColuna(campo, h) {
+    const c = h.includes('comprador') || h.includes('cliente') || h.includes('buyer') ? 3 : 0;
+    switch (campo) {
+      case 'nome':
+        if (RUIM_NOME.test(h) || h.includes('mail') || h.includes('telefone')) return 0;
+        if (h === 'nome' || h === 'name' || h === 'nome completo') return 8 + c;
+        if (h.includes('nome') || h.includes('name')) return 5 + c;
+        return h === 'comprador' ? 6 : 0;
+      case 'email':
+        if (/afiliad|produtor/.test(h)) return 0;
+        return h.includes('email') || h.includes('e-mail') ? 5 + c : 0;
+      case 'telefone':
+        if (/afiliad|produtor/.test(h) || h === 'ddd') return 0;
+        return /telefone|celular|phone|whats|fone/.test(h) ? 5 + c + (h.includes('final') || h.includes('complet') ? 2 : 0) : 0;
+      case 'ddd': return /(^|\W)ddd(\W|$)/.test(h) && !/telefone.*ddd.*\d/.test(h) && h.length < 30 ? 5 + c : 0;
+      case 'cidade': return /cidade|city|municipio/.test(h) ? 5 + c : 0;
+      case 'transacao':
+        if (/data|status|valor|tipo|moeda/.test(h)) return 0;
+        return h.includes('transa') ? (h === 'transacao' || h.includes('codigo') ? 8 : 5) : 0;
+      case 'produto':
+        if (/valor|preco|price|moeda|produtor|nome do produtor/.test(h)) return 0;
+        if (/(codigo|id|cod)\.? ?(do )?produto|product ?id/.test(h)) return 9;
+        return /produto|product|ingresso|oferta/.test(h) ? 5 : 0;
+      case 'status':
+        if (!h.includes('status') && !h.includes('situacao')) return 0;
+        return 5 + (/transa|venda|compra|pagamento/.test(h) ? 3 : 0);
+      case 'data':
+        if (!/data|date/.test(h) || /nasc|venc|garant|cancel|reembol/.test(h)) return 0;
+        return 3 + (/aprova|compra|venda|pedido|transa/.test(h) ? 3 : 0);
+      default: return 0;
+    }
+  }
+  function detectarColunas(cab) {
+    const h = cab.map(norm);
+    const map = {};
+    const usados = new Set();
+    CAMPOS_IMP.forEach(([campo]) => {
+      let melhor = -1, pts = 0;
+      h.forEach((x, i) => { const p = pontuaColuna(campo, x.trim()); if (p > pts && !usados.has(i)) { pts = p; melhor = i; } });
+      map[campo] = melhor;
+      if (melhor >= 0) usados.add(melhor);
+    });
+    return map;
+  }
+  function acharCabecalho(linhas) {
+    // primeira linha (entre as 15 primeiras) que parece cabeçalho
+    for (let i = 0; i < Math.min(15, linhas.length); i++) {
+      const h = linhas[i].map(norm).join(' | ');
+      if (/(nome|name|comprador)/.test(h) && /(mail|telefone|phone|transa)/.test(h)) return i;
+    }
+    return 0;
+  }
+  const STATUS_OK = /aprovad|approved|complet|conclu|pago|paid/;
+  const STATUS_FORA = /reembols|refund|chargeback|estorn|cancel|expir|recus|protest|disput|aguard|pendent|waiting|delayed|atras|bloq|devol/;
+
+  function carregarSheetJS() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    return new Promise((ok, erro) => {
+      const sc = document.createElement('script');
+      sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      sc.onload = () => ok(window.XLSX);
+      sc.onerror = () => erro(new Error('Não consegui carregar o leitor de Excel. Salve a planilha como CSV e tente de novo.'));
+      document.head.appendChild(sc);
+    });
+  }
+
+  async function lerArquivoTabela(f) {
+    const nome = f.name.toLowerCase();
+    if (/\.(xlsx|xls|ods)$/.test(nome)) {
+      const XLSX = await carregarSheetJS();
+      const buf = await f.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      return XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' }).map((r) => r.map((c) => String(c == null ? '' : c)))
+        .filter((r) => r.some((c) => c.trim()));
+    }
+    const buf = await f.arrayBuffer();
+    let txt = new TextDecoder('utf-8').decode(buf);
+    if (txt.includes('�')) txt = new TextDecoder('iso-8859-1').decode(buf);
+    return parseCsv(txt);
+  }
+
   function abrirImportar() {
-    let linhas = [];
+    let dados = null, iCab = 0, cab = [], mapa = {}, linhas = [], resumo = {};
+    const idVip = () => String(S.config.id_vip || '8502486');
+    const idPad = () => String(S.config.id_padrao || '8502151');
     abrirSheet({
-      titulo: 'Importar leads',
+      titulo: 'Importar planilha de compras',
+      largo: true,
       corpo: `
-        <p class="small muted" style="margin-top:0">Envie um CSV com cabeçalho. Colunas reconhecidas: <b>nome</b>, <b>e-mail</b>, <b>telefone</b>, <b>cidade</b>, <b>transação</b> e <b>produto</b> (se o produto tiver "VIP" ou o ID ${esc(S.config.id_vip || '8502486')}, entra como VIP).</p>
-        <div class="field"><label>Arquivo CSV</label><input class="input" type="file" accept=".csv,text/csv" id="imp-arq"></div>
-        <div class="field"><label>Tipo de ingresso quando não identificado</label>
-          <select class="input" id="imp-tipo"><option value="padrao">Padrão</option><option value="vip">VIP</option></select></div>
+        <p class="small muted" style="margin-top:0">Na Hotmart: <b>Vendas → Relatório de vendas</b> (ou Minhas vendas) → filtre pelos produtos <b>${esc(idPad())}</b> e <b>${esc(idVip())}</b> → <b>Exportar</b>. Envie o arquivo aqui (CSV ou Excel). Leads que já existem são ignorados.</p>
+        <div class="field"><label>Arquivo (.csv, .xlsx, .xls)</label><input class="input" type="file" accept=".csv,.xlsx,.xls,.ods,text/csv" id="imp-arq"></div>
+        <div id="imp-map"></div>
         <div id="imp-prev" class="small"></div>`,
-      rodape: `<button class="btn line" data-x>Cancelar</button><button class="btn amarelo" id="imp-ok" disabled data-loading=" Importando...">Importar</button>`,
+      rodape: `<button class="btn line" data-x>Cancelar</button><button class="btn line" id="imp-sim" disabled data-loading=" Conferindo...">Simular</button><button class="btn amarelo" id="imp-ok" disabled data-loading=" Importando...">Importar</button>`,
       onMount: (sh) => {
+        const $map = sh.querySelector('#imp-map');
         const prev = sh.querySelector('#imp-prev');
         const ok = sh.querySelector('#imp-ok');
-        const montar = (dados) => {
-          const cab = dados[0].map(norm);
-          const acha = (...ks) => cab.findIndex((h) => ks.some((k) => h.includes(k)));
-          const iN = acha('nome', 'name', 'comprador'), iE = acha('e-mail', 'email'), iT = acha('telefone', 'phone', 'celular', 'whats'),
-            iC = acha('cidade', 'city'), iX = acha('transa'), iP = acha('produto', 'product', 'ingresso', 'oferta');
-          const idVip = String(S.config.id_vip || '8502486');
-          const padrao = sh.querySelector('#imp-tipo').value;
-          return dados.slice(1).map((r) => {
-            const prod = iP >= 0 ? String(r[iP] || '') : '';
-            return {
-              nome: iN >= 0 ? r[iN] : '', email: iE >= 0 ? r[iE] : '', telefone: iT >= 0 ? r[iT] : '',
-              cidade: iC >= 0 ? r[iC] : '', transacao: iX >= 0 ? r[iX] : '',
-              tipo_ingresso: prod ? (/vip/i.test(prod) || prod.includes(idVip) ? 'vip' : 'padrao') : padrao
-            };
-          }).filter((x) => String(x.nome).trim());
+        const sim = sh.querySelector('#imp-sim');
+
+        const pintarMapa = () => {
+          const ops = (sel) => `<option value="-1">— não usar —</option>` + cab.map((c, i) => `<option value="${i}" ${sel === i ? 'selected' : ''}>${esc(c || '(coluna ' + (i + 1) + ')')}</option>`).join('');
+          $map.innerHTML = `
+            <div class="secao" style="margin-top:4px">Confira as colunas</div>
+            <div class="row" style="flex-wrap:wrap">${CAMPOS_IMP.map(([k, r]) => `<div class="field" style="min-width:210px"><label>${r}</label><select class="input" data-map="${k}">${ops(mapa[k])}</select></div>`).join('')}</div>
+            <div class="row" style="flex-wrap:wrap">
+              <div class="field" style="min-width:210px"><label>Ingresso quando não der para identificar</label><select class="input" id="imp-tipo"><option value="padrao">Padrão</option><option value="vip">VIP</option></select></div>
+              <label class="check" style="min-width:210px;align-self:center"><input type="checkbox" id="imp-so-aprov" checked><span>Importar só compras <b>aprovadas/completas</b> (ignora reembolsadas, canceladas, aguardando pagamento)</span></label>
+            </div>`;
+          $map.querySelectorAll('select[data-map]').forEach((s2) => s2.addEventListener('change', () => { mapa[s2.dataset.map] = Number(s2.value); montar(); }));
+          $map.querySelector('#imp-tipo').addEventListener('change', montar);
+          $map.querySelector('#imp-so-aprov').addEventListener('change', montar);
         };
-        let bruto = null;
-        const atualizar = () => {
-          if (!bruto) return;
-          linhas = montar(bruto);
+
+        const montar = () => {
+          const padrao = $map.querySelector('#imp-tipo').value;
+          const soAprov = $map.querySelector('#imp-so-aprov').checked;
+          const v = (r, k) => (mapa[k] >= 0 ? String(r[mapa[k]] || '').trim() : '');
+          resumo = { total: 0, fora: 0, semNome: 0, outros: 0, porStatus: {} };
+          linhas = [];
+          dados.slice(iCab + 1).forEach((r) => {
+            resumo.total++;
+            const st = v(r, 'status');
+            if (st) resumo.porStatus[st] = (resumo.porStatus[st] || 0) + 1;
+            const stn = norm(st);
+            if (soAprov && st && (STATUS_FORA.test(stn) || !STATUS_OK.test(stn))) { resumo.fora++; return; }
+            const prod = v(r, 'produto');
+            let tipo = padrao;
+            if (prod) {
+              if (prod.includes(idVip()) || /vip/i.test(prod)) tipo = 'vip';
+              else if (prod.includes(idPad())) tipo = 'padrao';
+              else if (/^\d{5,}$/.test(prod)) { resumo.outros++; return; } // outro produto da conta
+            }
+            let tel = v(r, 'telefone');
+            const ddd = v(r, 'ddd').replace(/\D/g, '');
+            if (ddd && tel && soDig(tel).length < 10) tel = ddd + soDig(tel);
+            const nome = v(r, 'nome');
+            if (!nome) { resumo.semNome++; return; }
+            const dt = v(r, 'data');
+            let criado = '';
+            const m = dt.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
+            if (m) criado = `${m[3]}-${m[2]}-${m[1]}T${m[4] || '12'}:${m[5] || '00'}:00`;
+            else if (/^\d{4}-\d{2}-\d{2}/.test(dt)) criado = dt.slice(0, 19).replace(' ', 'T');
+            linhas.push({ nome, email: v(r, 'email'), telefone: tel, cidade: v(r, 'cidade'), transacao: v(r, 'transacao'), tipo_ingresso: tipo, status_hotmart: st, criado_em: criado });
+          });
           const vip = linhas.filter((l) => l.tipo_ingresso === 'vip').length;
-          prev.innerHTML = `<div class="card" style="padding:12px;box-shadow:none;border:1.5px solid var(--borda)"><b>${linhas.length} linhas prontas</b> · ${vip} VIP · ${linhas.length - vip} Padrão<br>
-            <span class="muted">Ex.: ${linhas.slice(0, 3).map((l) => esc(l.nome) + ' (' + esc(l.email || l.telefone) + ')').join(', ')}</span></div>`;
-          ok.disabled = !linhas.length;
+          const semTel = linhas.filter((l) => soDig(l.telefone).length < 10).length;
+          const sts = Object.entries(resumo.porStatus).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, n]) => `${esc(k)}: ${n}`).join(' · ');
+          prev.innerHTML = `<div class="card" style="padding:12px;box-shadow:none;border:1.5px solid var(--borda)">
+            <b>${linhas.length} compras prontas para importar</b> · ${vip} VIP · ${linhas.length - vip} Padrão${semTel ? ` · <span style="color:var(--vermelho)">${semTel} sem telefone</span>` : ''}<br>
+            <span class="muted">${resumo.total} linhas no arquivo${resumo.fora ? ` · ${resumo.fora} fora por status` : ''}${resumo.outros ? ` · ${resumo.outros} de outros produtos` : ''}${resumo.semNome ? ` · ${resumo.semNome} sem nome` : ''}</span>
+            ${sts ? `<br><span class="muted">Status no arquivo: ${sts}</span>` : ''}
+            <div style="margin-top:8px">${linhas.slice(0, 4).map((l) => `<div>• ${esc(l.nome)} — ${esc(telFmt(l.telefone))} — ${esc(l.email)} — <b>${l.tipo_ingresso === 'vip' ? 'VIP' : 'Padrão'}</b></div>`).join('')}</div></div>
+            <div id="imp-res"></div>`;
+          ok.disabled = sim.disabled = !linhas.length || mapa.nome < 0;
         };
-        sh.querySelector('#imp-tipo').addEventListener('change', atualizar);
-        sh.querySelector('#imp-arq').addEventListener('change', (e) => {
+
+        sh.querySelector('#imp-arq').addEventListener('change', async (e) => {
           const f = e.target.files[0]; if (!f) return;
-          const fr = new FileReader();
-          fr.onload = () => {
-            try {
-              bruto = parseCsv(String(fr.result));
-              if (bruto.length < 2) throw new Error('Arquivo sem linhas.');
-              atualizar();
-            } catch (err) { prev.textContent = 'Não consegui ler o arquivo: ' + err.message; ok.disabled = true; }
-          };
-          fr.readAsText(f, 'utf-8');
+          prev.textContent = 'Lendo arquivo…';
+          try {
+            dados = await lerArquivoTabela(f);
+            if (dados.length < 2) throw new Error('Arquivo sem linhas.');
+            iCab = acharCabecalho(dados);
+            cab = dados[iCab];
+            mapa = detectarColunas(cab);
+            pintarMapa();
+            montar();
+          } catch (err) { prev.textContent = 'Não consegui ler o arquivo: ' + err.message; ok.disabled = sim.disabled = true; }
         });
-        ok.addEventListener('click', (ev) => comBotao(ev.currentTarget, async () => {
-          const r = await api('admin.importar', { linhas });
+        const enviar = (simular) => async () => {
+          const r = await api('admin.importar', { linhas, simular });
+          const box = sh.querySelector('#imp-res');
+          const txt = `${r.importados} novos leads (${r.vip} VIP) · ${r.duplicados} já existiam${r.viraram_vip ? ` · ${r.viraram_vip} viraram VIP` : ''}${r.invalidos ? ` · ${r.invalidos} sem contato` : ''}`;
+          if (simular) { box.innerHTML = `<div class="cliente-box mdl" style="margin-top:10px"><b>Simulação (nada foi gravado)</b>${txt}</div>`; return; }
           fecharSheet();
-          toast(`${r.importados} importados · ${r.duplicados} duplicados ignorados`, 'ok');
+          toast('Importado: ' + txt, 'ok');
           await carregar();
+        };
+        sim.addEventListener('click', (ev) => comBotao(ev.currentTarget, enviar(true)));
+        ok.addEventListener('click', (ev) => comBotao(ev.currentTarget, enviar(false)));
+      }
+    });
+  }
+
+  /* ---------------- importação direta pela API da Hotmart */
+  function abrirHotmartApi() {
+    const st = (S.config && S.config.hotmart_api) || {};
+    abrirSheet({
+      titulo: 'Puxar compras da Hotmart (API)',
+      corpo: `
+        <p class="small muted" style="margin-top:0">Busca todas as compras aprovadas dos ingressos <b>${esc(S.config.id_padrao || '8502151')}</b> (Padrão) e <b>${esc(S.config.id_vip || '8502486')}</b> (VIP) direto na Hotmart, com nome, e-mail e telefone. Quem já está no sistema é ignorado, e compras reembolsadas/canceladas movem o lead para Reembolso.</p>
+        <div class="cliente-box ${st.configurada ? 'mdl' : 'exmdl'}"><b>Credencial</b>${st.configurada ? 'Configurada (' + esc(st.client_id) + ')' : 'Ainda não configurada'}</div>
+        <details ${st.configurada ? '' : 'open'} style="margin-bottom:12px">
+          <summary class="small" style="cursor:pointer;font-weight:700;margin-bottom:10px">${st.configurada ? 'Trocar credencial' : 'Cadastrar credencial'}</summary>
+          <p class="small muted">Na Hotmart: <b>Ferramentas → Credenciais Hotmart (API)</b> → <b>Criar credencial</b> (tipo API Hotmart). Copie o <b>Client ID</b>, o <b>Client Secret</b> e o <b>Basic</b>.</p>
+          <div class="field"><label>Client ID</label><input class="input" id="h-id" autocomplete="off"></div>
+          <div class="field"><label>Client Secret</label><input class="input" id="h-sec" type="password" autocomplete="new-password"></div>
+          <div class="field"><label>Basic (opcional)</label><input class="input" id="h-basic" type="password" autocomplete="new-password" placeholder="Basic xxxxx"></div>
+          <button class="btn line sm" id="h-salvar" data-loading=" Salvando...">Salvar credencial</button>
+        </details>
+        <div class="field"><label>Buscar compras desde</label><input class="input" id="h-desde" type="date" value="2026-01-01"></div>
+        <p class="hint">Use a data em que as vendas dos ingressos começaram. Pode levar até alguns minutos em contas com muitas vendas.</p>
+        <div id="h-res"></div>`,
+      rodape: `<button class="btn line" data-x>Fechar</button><button class="btn line" id="h-sim" data-loading=" Consultando...">Simular</button><button class="btn amarelo" id="h-imp" data-loading=" Importando...">Importar</button>`,
+      onMount: (sh) => {
+        const res = sh.querySelector('#h-res');
+        sh.querySelector('#h-salvar').addEventListener('click', (ev) => comBotao(ev.currentTarget, async () => {
+          const id = sh.querySelector('#h-id').value.trim(), sec = sh.querySelector('#h-sec').value.trim();
+          if (!id || !sec) throw new Error('Preencha Client ID e Client Secret.');
+          const r = await api('admin.hotmart.cred', { client_id: id, client_secret: sec, basic: sh.querySelector('#h-basic').value.trim() });
+          S.config.hotmart_api = r;
+          toast('Credencial salva', 'ok');
+          abrirHotmartApi();
         }));
+        const rodar = (simular) => async () => {
+          res.innerHTML = '<p class="small muted">Consultando a Hotmart… isso pode levar alguns minutos, não feche esta janela.</p>';
+          try {
+            const r = await api('admin.hotmart.importar', { desde: sh.querySelector('#h-desde').value, simular });
+            res.innerHTML = `<div class="cliente-box ${simular ? 'exmdl' : 'mdl'}"><b>${simular ? 'Simulação — nada foi gravado' : 'Importação concluída'}</b>
+              ${r.encontradas} compras aprovadas na Hotmart desde ${esc(String(r.desde).split('-').reverse().join('/'))} (Padrão: ${r.por_produto.padrao || 0} · VIP: ${r.por_produto.vip || 0})<br>
+              <b style="display:inline;text-transform:none;font-size:14px">${r.importados} ${simular ? 'seriam importados' : 'novos leads'}</b> (${r.vip} VIP) · ${r.duplicados} já existiam${r.viraram_vip ? ` · ${r.viraram_vip} ${simular ? (r.viraram_vip > 1 ? 'virariam' : 'viraria') : (r.viraram_vip > 1 ? 'viraram' : 'virou')} VIP` : ''}${r.sem_telefone ? ` · <span style="color:var(--vermelho)">${r.sem_telefone} sem telefone</span>` : ''}<br>
+              ${r.canceladas} compras canceladas/reembolsadas na Hotmart · ${r.reembolsos_marcados} ${simular ? 'iriam' : 'foram'} para Reembolso
+              ${r.exemplos.length ? `<div class="small" style="margin-top:6px">${r.exemplos.map((x) => '• ' + esc(x)).join('<br>')}</div>` : ''}</div>`;
+            if (!simular) { toast(r.importados + ' leads importados da Hotmart', 'ok'); carregar(true); }
+          } catch (e) {
+            res.innerHTML = `<div class="cliente-box" style="background:var(--vermelho-2)"><b>Não deu certo</b>${esc(e.message)}</div>`;
+          }
+        };
+        sh.querySelector('#h-sim').addEventListener('click', (ev) => comBotao(ev.currentTarget, rodar(true)));
+        sh.querySelector('#h-imp').addEventListener('click', (ev) => comBotao(ev.currentTarget, rodar(false)));
       }
     });
   }
@@ -1474,6 +1658,7 @@
       case 'exportar': exportarLeads(); break;
       case 'exportar-vendas': exportarVendas(); break;
       case 'importar': abrirImportar(); break;
+      case 'hotmart-api': abrirHotmartApi(); break;
       case 'novo-usuario': abrirFormUsuario(); break;
       case 'editar-usuario': abrirFormUsuario(id); break;
       case 'novo-produto': abrirFormProduto(); break;
