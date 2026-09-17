@@ -359,3 +359,40 @@ table.tabela { width: 100%; border-collapse: collapse; font-size: 13px; min-widt
 
 .carregando { display: grid; place-items: center; min-height: 60vh; color: var(--texto-2); gap: 12px; }
 .carregando .spin { width: 32px; height: 32px; border: 3px solid var(--azul); border-right-color: transparent; border-radius: 50%; animation: gira .8s linear infinite; }
+
+/* ---------- Kanban do funil ---------- */
+.kanban { display: flex; gap: 12px; overflow-x: auto; padding: 2px 0 12px; scroll-snap-type: x proximity; }
+.kanban::-webkit-scrollbar { height: 8px; }
+.kanban::-webkit-scrollbar-thumb { background: #C7D0DB; border-radius: 4px; }
+.kcol { flex: 0 0 300px; max-width: 300px; scroll-snap-align: start; display: flex; flex-direction: column; gap: 10px;
+  background: #E7EBF3; border-radius: 16px; padding: 10px; align-self: flex-start; }
+@media (max-width: 420px) { .kcol { flex-basis: 86vw; max-width: 86vw; } }
+.kcol-head { background: #fff; border-radius: 14px; border-top: 4px solid var(--azul); padding: 10px 12px; box-shadow: var(--sombra); }
+.kcol-tit { display: flex; align-items: center; gap: 8px; }
+.kcol-tit b { font-size: 14.5px; flex: 1; }
+.kcol-n { background: var(--fundo); border-radius: 999px; padding: 2px 9px; font-size: 12px; font-weight: 700; color: var(--texto-2); }
+.kcol-inst summary { font-size: 12px; color: var(--azul); font-weight: 700; cursor: pointer; margin-top: 8px; }
+.kcol-inst ul, ul.inst { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--texto-2); }
+.kcol-inst li, ul.inst li { margin-bottom: 3px; }
+.kcol-body { display: flex; flex-direction: column; gap: 10px; }
+
+/* ---------- Fases e marcos ---------- */
+.fase-opcao { display: block; width: 100%; text-align: left; background: #fff; border: 1.5px solid var(--borda); border-left: 4px solid var(--azul); border-radius: 12px; padding: 11px 12px; margin-bottom: 8px; }
+.fase-opcao.on { background: var(--azul-2); }
+.fase-opcao b { display: block; font-size: 14.5px; margin-bottom: 2px; }
+.fase-opcao ul { margin: 4px 0 0; padding-left: 16px; font-size: 12.5px; color: var(--texto-2); }
+.links-marco { display: grid; gap: 8px; margin-bottom: 12px; }
+.btn.wrap { white-space: normal; text-align: left; justify-content: flex-start; line-height: 1.25; }
+.marcos { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.marco { display: flex; align-items: center; gap: 9px; text-align: left; background: #fff; border: 1.5px solid var(--borda); border-radius: 12px; padding: 9px 11px; }
+.marco.on { border-color: var(--verde); background: var(--verde-2); }
+.marco .mk-ic { width: 26px; height: 26px; border-radius: 50%; background: var(--fundo); display: grid; place-items: center; flex: none; }
+.marco.on .mk-ic { background: var(--verde); color: #fff; }
+.marco .mk-ic svg { width: 14px; height: 14px; }
+.marco .mk-txt { min-width: 0; }
+.marco .mk-txt b { display: block; font-size: 13px; }
+.marco .mk-txt span { font-size: 11.5px; color: var(--texto-2); }
+.cores { display: flex; gap: 8px; flex-wrap: wrap; }
+.cores button { width: 34px; height: 34px; border-radius: 50%; border: 2px solid transparent; }
+.cores button.on { border-color: var(--navy); box-shadow: 0 0 0 3px rgba(1,21,39,.12); }
+code { background: var(--fundo); padding: 1px 5px; border-radius: 5px; font-size: 12px; }
