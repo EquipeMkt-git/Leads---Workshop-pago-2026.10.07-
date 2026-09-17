@@ -69,7 +69,7 @@
   const primeiroNome = (n) => String(n || '').trim().split(/\s+/)[0] || '';
   const iniciais = (n) => { const p = String(n || '?').trim().split(/\s+/); return ((p[0] || '')[0] || '?').toUpperCase() + ((p.length > 1 ? p[p.length - 1][0] : '') || '').toUpperCase(); };
   const corDe = (s) => { const cores = ['#0369B1', '#0B7A9E', '#7A4CC2', '#C2410C', '#0F766E', '#B45309', '#1D4ED8', '#9D174D']; let h = 0; for (const c of String(s || '')) h = (h * 31 + c.charCodeAt(0)) >>> 0; return cores[h % cores.length]; };
-  const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const soDig = (s) => String(s || '').replace(/\.0$/, '').replace(/\D/g, '');
   const telFmt = (t) => {
     let d = soDig(t);
@@ -1251,7 +1251,21 @@
             <div class="field"><label>ID ingresso Padrão</label><input class="input" id="cfg-pad" value="${esc(c.id_padrao || '')}" inputmode="numeric"></div>
             <div class="field"><label>ID ingresso VIP</label><input class="input" id="cfg-vip" value="${esc(c.id_vip || '')}" inputmode="numeric"></div>
           </div>
-          <button class="btn line sm" data-act="salvar-config" data-loading=" Salvando...">Salvar IDs</button>
+          <label class="check"><input type="checkbox" id="cfg-teste" ${c.modo_teste ? 'checked' : ''}><span><b>Modo teste:</b> aceitar o produto de teste da Hotmart (ID 0) como ingresso Padrão. Desligue depois de testar.</span></label>
+          <button class="btn line sm" data-act="salvar-config" data-loading=" Salvando...">Salvar</button>
+        </section>
+
+        <section class="card bloco">
+          <h3>Últimos webhooks recebidos <span class="muted">${(c.webhooks || []).length}</span></h3>
+          <p class="small muted" style="margin-top:-6px">A Hotmart recebe resposta na hora e o evento é processado em até 1 minuto (ou ao abrir o sistema).</p>
+          ${(c.webhooks || []).length ? `<div class="feed">${c.webhooks.map((w) => {
+            const cor = { ok: 'var(--verde)', ignorado: 'var(--texto-3)', erro: 'var(--vermelho)', pendente: 'var(--amarelo)' }[w.status] || 'var(--azul)';
+            return `<div class="feed-item"><span class="feed-dot" style="background:${cor}"></span>
+              <div style="flex:1;min-width:0"><div><b>${esc(w.evento || '—')}</b> · produto ${esc(w.produto || '—')} · <b style="color:${cor}">${esc(w.status)}</b></div>
+              <div class="small muted" style="overflow-wrap:anywhere">${esc(w.resultado || w.email || '')}</div>
+              <div class="quando">${fmtData(w.recebido_em)}${w.transacao ? ' · ' + esc(w.transacao) : ''}</div></div></div>`;
+          }).join('')}</div>` : '<p class="small muted">Nenhum webhook recebido ainda.</p>'}
+          <button class="btn line sm" data-act="processar-fila" data-loading=" Processando...">${I.refresh}Processar agora</button>
         </section>
 
         <section class="card bloco">
@@ -1474,8 +1488,16 @@
       }
       case 'salvar-config':
         comBotao(el, async () => {
-          S.config = await api('admin.config', { config: { HOTMART_ID_PADRAO: document.getElementById('cfg-pad').value, HOTMART_ID_VIP: document.getElementById('cfg-vip').value, BASE_CLIENTES_ID: document.getElementById('cfg-base').value } });
+          S.config = await api('admin.config', { config: { HOTMART_ID_PADRAO: document.getElementById('cfg-pad').value, HOTMART_ID_VIP: document.getElementById('cfg-vip').value, BASE_CLIENTES_ID: document.getElementById('cfg-base').value, HOTMART_MODO_TESTE: document.getElementById('cfg-teste').checked ? 'SIM' : 'NAO' } });
           toast('Configurações salvas', 'ok');
+          renderMain();
+        });
+        break;
+      case 'processar-fila':
+        comBotao(el, async () => {
+          const r = await api('admin.processarFila');
+          toast(r.ocupado ? 'A fila já está sendo processada, aguarde.' : `${r.processados} webhook(s) processado(s)`, 'ok');
+          await carregar();
         });
         break;
       case 'sincronizar':
