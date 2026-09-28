@@ -396,3 +396,11 @@ table.tabela { width: 100%; border-collapse: collapse; font-size: 13px; min-widt
 .cores button { width: 34px; height: 34px; border-radius: 50%; border: 2px solid transparent; }
 .cores button.on { border-color: var(--navy); box-shadow: 0 0 0 3px rgba(1,21,39,.12); }
 code { background: var(--fundo); padding: 1px 5px; border-radius: 5px; font-size: 12px; }
+
+.prod-linha { display: grid; grid-template-columns: 96px 1fr 104px 44px; gap: 8px; margin-bottom: 8px; align-items: center; }
+.prod-linha .input { min-height: 42px; font-size: 14px; }
+@media (max-width: 560px) {
+  .prod-linha { grid-template-columns: 1fr 1fr; }
+  .prod-linha [data-p="nome"] { grid-column: 1 / -1; order: -1; }
+}
+.tag.origem { background: #E7EEF6; color: #1C4E80; }
