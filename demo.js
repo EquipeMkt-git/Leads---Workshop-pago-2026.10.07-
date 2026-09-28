@@ -57,6 +57,7 @@
       nome: n, email, telefone: '55' + pick(['11', '41', '62', '21', '85', '19']) + '9' + String(10000000 + Math.floor(r() * 89999999)),
       cidade: pick(cidades), empresa: '', obs: '', status: 'novo', responsavel_id: '', responsavel_nome: '', inicio_tratativa: '', ultima_acao: '',
       fechado_em: '', motivo: '', mensagem_usada: '', transacao: 'HP' + (1700000000 + i * 7919), produto_hotmart: vip ? '8502486' : '8502151',
+      origem_evento: i % 4 === 3 ? 'Workshop Online de Gestão de Pessoas' : (vip ? 'Workshop presencial 07/10 — VIP' : 'Workshop presencial 07/10 — Padrão'),
       valor_ingresso: vip ? '997' : '197', status_hotmart: 'APPROVED', cliente_mdl: '', cliente_ilu: '', eventos: '', cargo: pick(['Dono / Sócio', 'Dono / Sócio', 'Diretor', 'Gerente']),
       faturamento: pick(fats), criado_por: i % 9 === 0 ? 'Ana Ribeiro' : 'Hotmart', atualizado_em: '',
       fase_id: '', fase_em: '', confirmado: '', confirmado_em: '', upgrade: '', upgrade_em: '', diagnostico: '', diagnostico_em: '',
@@ -139,7 +140,12 @@
       links: { upgrade: config.upgrade_url, upgrade_valor: config.upgrade_valor, diagnostico: config.diagnostico_url, evento: config.evento_data }
     };
   };
-  const config = { upgrade_url: 'https://pay.hotmart.com/exemplo-upgrade-vip', upgrade_valor: '50', diagnostico_url: 'https://forms.exemplo.com/diagnostico', evento_data: '2026-10-07', distribuicao_auto: false,
+  const config = { produtos: [
+      { id: '8502151', nome: 'Workshop presencial 07/10 — Padrão', tipo: 'padrao' },
+      { id: '8502486', nome: 'Workshop presencial 07/10 — VIP', tipo: 'vip' },
+      { id: '4195296', nome: 'Workshop Online de Gestão de Pessoas', tipo: 'padrao' }
+    ],
+    upgrade_url: 'https://pay.hotmart.com/exemplo-upgrade-vip', upgrade_valor: '50', diagnostico_url: 'https://forms.exemplo.com/diagnostico', evento_data: '2026-10-07', distribuicao_auto: false,
     webhook_dados: 'https://script.google.com/macros/s/SEU_ID/exec?src=dados&key=CHAVE&tipo=diagnostico',
     webhook: 'https://script.google.com/macros/s/SEU_ID/exec?src=hotmart&key=CHAVE', id_padrao: '8502151', id_vip: '8502486', base_id: '1ihgdFxaR5cM6xyAECvJ-IORN1dmghRin9gmRFCsHe5I', ultima_sincronizacao: atras(0.4), modo_teste: false, hotmart_api: { configurada: false, client_id: '' },
     webhooks: [{ recebido_em: atras(0.2), evento: 'PURCHASE_APPROVED', produto: '8502486', transacao: 'HP1700102947', email: 'felipe.cardoso@exemplo.com', status: 'ok', resultado: 'Lead criado: L113' },
@@ -305,6 +311,7 @@
     'admin.processarFila': () => ({ processados: 0 }),
     'admin.config': (b) => {
       const c = b.config || {};
+      if (c.HOTMART_PRODUTOS !== undefined) config.produtos = String(c.HOTMART_PRODUTOS).split('\n').filter(Boolean).map((l) => { const p2 = l.split(';'); return { id: (p2[0] || '').trim(), nome: (p2[1] || '').trim(), tipo: /vip/i.test(p2[2] || '') ? 'vip' : 'padrao' }; });
       if (c.HOTMART_ID_PADRAO) config.id_padrao = c.HOTMART_ID_PADRAO;
       if (c.HOTMART_ID_VIP) config.id_vip = c.HOTMART_ID_VIP;
       if (c.BASE_CLIENTES_ID) config.base_id = c.BASE_CLIENTES_ID;
