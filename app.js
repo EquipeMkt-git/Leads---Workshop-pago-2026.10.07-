@@ -24,8 +24,8 @@
     token: null, user: null, modo: 'usuario', view: 'novo',
     leads: [], vendas: [], produtos: [], mensagens: [], usuarios: [], historico: [], config: {}, fases: [], links: {},
     busca: '', filtro: 'todos', limite: 60,
-    adm: { status: 'todos', resp: 'todos', tipo: 'todos', cliente: 'todos' },
-    painel: { resp: 'todos', tipo: 'todos' },
+    adm: { status: 'todos', resp: 'todos', tipo: 'todos', cliente: 'todos', origem: 'todos' },
+    painel: { resp: 'todos', tipo: 'todos', origem: 'todos' },
     catalogo: 'fases', funilLista: false,
     carregado: false, sync: false
   };
@@ -460,6 +460,7 @@
     if (mdl) t.push(`<span class="tag ${mdl.cls}" title="${esc(mdl.titulo)}">${esc(mdl.curto)}</span>`);
     const ilu = rotuloCliente(l.cliente_ilu, 'ILU');
     if (ilu) t.push(`<span class="tag ${ilu.cls}" title="${esc(ilu.titulo)}">${esc(ilu.curto)}</span>`);
+    if (l.origem_evento) t.push(`<span class="tag origem" title="Origem do lead">${esc(String(l.origem_evento).split('—')[0].trim())}</span>`);
     const ev = eventosDe(l);
     if (ev.length) t.push(`<span class="tag evento">${ev.length} evento${ev.length > 1 ? 's' : ''}</span>`);
     if (l.status === 'tratativa' && horasDesde(l.ultima_acao || l.inicio_tratativa) > 48) t.push(`<span class="tag alerta">${I.relogio}Parado ${rel(l.ultima_acao || l.inicio_tratativa).replace('há ', '')}</span>`);
@@ -644,6 +645,7 @@
     ];
     if (l.inicio_tratativa) info.push(['Início tratativa', fmtData(l.inicio_tratativa)]);
     if (l.fechado_em && st !== 'tratativa') info.push(['Fechado em', fmtData(l.fechado_em)]);
+    if (l.origem_evento) info.push(['Produto / origem', l.origem_evento, 'full']);
     if (l.transacao) info.push(['Transação', l.transacao]);
     if (l.valor_ingresso) info.push(['Valor ingresso', brl(l.valor_ingresso)]);
     if (l.motivo) info.push(['Motivo', l.motivo, 'full']);
@@ -1072,6 +1074,11 @@
     const P = S.painel;
     let leads = S.leads, vendas = S.vendas;
     if (P.resp !== 'todos') { leads = leads.filter((l) => l.responsavel_id === P.resp); vendas = vendas.filter((v) => v.usuario_id === P.resp); }
+    if (P.origem !== 'todos') {
+      leads = leads.filter((l) => (l.origem_evento || '(sem origem)') === P.origem);
+      const ids0 = new Set(leads.map((l) => l.id));
+      vendas = vendas.filter((v) => ids0.has(v.lead_id));
+    }
     if (P.tipo !== 'todos') {
       leads = leads.filter((l) => (l.tipo_ingresso === 'vip' ? 'vip' : 'padrao') === P.tipo);
       const ids = new Set(leads.map((l) => l.id));
@@ -1131,6 +1138,7 @@
       <div class="page-head"><h2>Painel</h2></div>
       <div class="filtros-linha">
         <select class="input" data-painel="resp"><option value="todos">Toda a equipe</option>${opsResp}</select>
+        <select class="input" data-painel="origem"><option value="todos">Todas as origens</option>${origensLeads().map((o) => `<option value="${esc(o)}" ${P.origem === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>
         <select class="input" data-painel="tipo"><option value="todos" ${P.tipo === 'todos' ? 'selected' : ''}>Padrão + VIP</option><option value="padrao" ${P.tipo === 'padrao' ? 'selected' : ''}>Só Padrão</option><option value="vip" ${P.tipo === 'vip' ? 'selected' : ''}>Só VIP</option></select>
       </div>
       <div class="kpis">
@@ -1201,6 +1209,24 @@
         </section>
 
         <section class="card bloco">
+          <h3>Leads por origem</h3>
+          ${(() => {
+            const grupos = {};
+            (P.origem === 'todos' ? S.leads : leads).forEach((l) => {
+              const k = l.origem_evento || '(sem origem)';
+              grupos[k] = grupos[k] || { n: 0, ganhos: 0, receita: 0 };
+              grupos[k].n++;
+              if (l.status === 'ganho') grupos[k].ganhos++;
+              S.vendas.filter((v) => v.lead_id === l.id && v.status === 'ativa').forEach((v) => { grupos[k].receita += num(v.valor_total); });
+            });
+            const lista = Object.entries(grupos).sort((a, b) => b[1].n - a[1].n);
+            const max = lista.length ? lista[0][1].n : 1;
+            return lista.length ? lista.map(([k, g]) => barra(esc(k), g.n, max, `${g.n} · ${g.ganhos} ganho${g.ganhos === 1 ? '' : 's'} · ${brlCurto(g.receita)}`, '#0369B1')).join('')
+              : '<p class="muted small">Sem leads ainda.</p>';
+          })()}
+        </section>
+
+        <section class="card bloco">
           <h3>Padrão x VIP</h3>
           <div class="tabela-wrap"><table class="tabela" style="min-width:0">
             <thead><tr><th></th><th class="r">Leads</th><th class="r">Ganhos</th><th class="r">Conv.</th><th class="r">Vendido</th></tr></thead>
@@ -1252,6 +1278,7 @@
     if (A.status !== 'todos') ls = ls.filter((l) => l.status === A.status);
     if (A.resp !== 'todos') ls = ls.filter((l) => (A.resp === '__sem' ? !l.responsavel_id : l.responsavel_id === A.resp));
     if (A.tipo !== 'todos') ls = ls.filter((l) => (l.tipo_ingresso === 'vip' ? 'vip' : 'padrao') === A.tipo);
+    if (A.origem !== 'todos') ls = ls.filter((l) => (l.origem_evento || '(sem origem)') === A.origem);
     if (A.cliente === 'mdl') ls = ls.filter(ehMdlAtivo);
     else if (A.cliente === 'exmdl') ls = ls.filter((l) => l.cliente_mdl && !ehMdlAtivo(l));
     else if (A.cliente === 'ilu') ls = ls.filter((l) => l.cliente_ilu);
@@ -1280,11 +1307,18 @@
       <div class="filtros-linha">
         <select class="input" data-adm="resp"><option value="todos">Todos os responsáveis</option><option value="__sem" ${A.resp === '__sem' ? 'selected' : ''}>Sem responsável</option>${opsResp}</select>
         <select class="input" data-adm="tipo">${sel('tipo', 'todos', 'Padrão + VIP')}${sel('tipo', 'padrao', 'Padrão')}${sel('tipo', 'vip', 'VIP')}</select>
+        <select class="input" data-adm="origem"><option value="todos">Todas as origens</option>${origensLeads().map((o) => `<option value="${esc(o)}" ${A.origem === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>
         <select class="input" data-adm="cliente">${sel('cliente', 'todos', 'Base: todos')}${sel('cliente', 'mdl', 'Cliente MDL ativo')}${sel('cliente', 'exmdl', 'Ex-MDL')}${sel('cliente', 'ilu', 'Base ILU')}${sel('cliente', 'eventos', 'Já foi a eventos')}${sel('cliente', 'nenhum', 'Não é cliente')}</select>
       </div>
       <p class="muted small" style="margin:0 0 10px">${ls.length} lead${ls.length === 1 ? '' : 's'} · o CSV exporta a lista filtrada</p>
       ${ls.length ? `<div class="lista">${ls.slice(0, S.limite).map(cardLead).join('')}</div>
         ${ls.length > S.limite ? `<div class="mais"><button class="btn line" data-act="mais">Mostrar mais (${ls.length - S.limite})</button></div>` : ''}` : '<div class="vazio"><h3>Nenhum lead encontrado</h3></div>'}`;
+  }
+
+  function origensLeads() {
+    const m = {};
+    S.leads.forEach((l) => { const k = l.origem_evento || '(sem origem)'; m[k] = (m[k] || 0) + 1; });
+    return Object.keys(m).sort((a, b) => m[b] - m[a]);
   }
 
   function viewEquipe() {
@@ -1533,6 +1567,15 @@
     });
   }
 
+  function linhaProduto(pr) {
+    return `<div class="prod-linha">
+      <input class="input" data-p="id" inputmode="numeric" placeholder="ID" value="${esc(pr.id || '')}">
+      <input class="input" data-p="nome" placeholder="Nome (ex.: Workshop Online de Gestão de Pessoas)" value="${esc(pr.nome || '')}">
+      <select class="input" data-p="tipo"><option value="padrao">Padrão</option><option value="vip" ${pr.tipo === 'vip' ? 'selected' : ''}>VIP</option></select>
+      <button class="btn ghost icon" data-act="del-produto-hot" aria-label="Remover">${I.lixo}</button>
+    </div>`;
+  }
+
   function viewAjustes() {
     const c = S.config || {};
     return `
@@ -1542,11 +1585,11 @@
           <h3>Webhook da Hotmart</h3>
           <p class="small muted" style="margin-top:-6px">Cadastre esta URL na Hotmart (Ferramentas → Webhook) para os produtos abaixo, com os eventos de compra aprovada, completa, reembolso e chargeback.</p>
           <div class="copiar" style="margin-bottom:12px"><input class="input" readonly value="${esc(c.webhook || '')}" id="wh-url"><button class="btn navy" data-act="copiar">Copiar</button></div>
-          <div class="row">
-            <div class="field"><label>ID ingresso Padrão</label><input class="input" id="cfg-pad" value="${esc(c.id_padrao || '')}" inputmode="numeric"></div>
-            <div class="field"><label>ID ingresso VIP</label><input class="input" id="cfg-vip" value="${esc(c.id_vip || '')}" inputmode="numeric"></div>
-          </div>
-          <label class="check"><input type="checkbox" id="cfg-teste" ${c.modo_teste ? 'checked' : ''}><span><b>Modo teste:</b> aceitar o produto de teste da Hotmart (ID 0) como ingresso Padrão. Desligue depois de testar.</span></label>
+          <div class="secao">Produtos que viram leads</div>
+          <p class="small muted" style="margin-top:-4px">Cada produto da Hotmart que deve entrar no sistema. O <b>nome</b> aparece como origem no card do lead e nos filtros. O <b>tipo</b> define se o lead entra como Padrão ou VIP.</p>
+          <div id="cfg-produtos">${(c.produtos || []).map((pr) => linhaProduto(pr)).join('')}</div>
+          <button class="btn line sm" data-act="add-produto-hot">${I.mais}Adicionar produto</button>
+          <label class="check" style="margin-top:14px"><input type="checkbox" id="cfg-teste" ${c.modo_teste ? 'checked' : ''}><span><b>Modo teste:</b> aceitar o produto de teste da Hotmart (ID 0) como ingresso Padrão. Desligue depois de testar.</span></label>
           <button class="btn line sm" data-act="salvar-config" data-loading=" Salvando...">Salvar</button>
         </section>
 
@@ -1649,7 +1692,7 @@
       [(l) => dec((vendasPor[l.id] || []).reduce((s, v) => s + num(v.valor_total), 0) || ''), 'Valor total'],
       ['cliente_mdl', 'Cliente MDL'], ['cliente_ilu', 'Cliente ILU'],
       [(l) => eventosDe(l).map((e) => e.e + ' ' + e.t + (/sim/i.test(e.f) ? ' (foi)' : '')).join(' | '), 'Eventos anteriores'],
-      ['origem', 'Origem'], ['transacao', 'Transação Hotmart'], [(l) => dec(l.valor_ingresso), 'Valor ingresso'], ['obs', 'Observações']
+      ['origem_evento', 'Produto / origem'], ['origem', 'Entrada no sistema'], ['transacao', 'Transação Hotmart'], [(l) => dec(l.valor_ingresso), 'Valor ingresso'], ['obs', 'Observações']
     ];
     baixarCsv(`leads-workshop-${new Date().toISOString().slice(0, 10)}.csv`, cab, ls);
     toast(ls.length + ' leads exportados', 'ok');
@@ -1770,13 +1813,12 @@
 
   function abrirImportar() {
     let dados = null, iCab = 0, cab = [], mapa = {}, linhas = [], resumo = {};
-    const idVip = () => String(S.config.id_vip || '8502486');
-    const idPad = () => String(S.config.id_padrao || '8502151');
+    const listaProds = () => (S.config.produtos || []);
     abrirSheet({
       titulo: 'Importar planilha de compras',
       largo: true,
       corpo: `
-        <p class="small muted" style="margin-top:0">Na Hotmart: <b>Vendas → Relatório de vendas</b> (ou Minhas vendas) → filtre pelos produtos <b>${esc(idPad())}</b> e <b>${esc(idVip())}</b> → <b>Exportar</b>. Envie o arquivo aqui (CSV ou Excel). Leads que já existem são ignorados.</p>
+        <p class="small muted" style="margin-top:0">Na Hotmart: <b>Vendas → Relatório de vendas</b> (ou Minhas vendas) → filtre pelos produtos ${listaProds().map((pr) => '<b>' + esc(pr.id) + '</b>').join(', ') || '<b>do sistema</b>'} → <b>Exportar</b>. Envie o arquivo aqui (CSV ou Excel). Leads que já existem são ignorados.</p>
         <div class="field"><label>Arquivo (.csv, .xlsx, .xls)</label><input class="input" type="file" accept=".csv,.xlsx,.xls,.ods,text/csv" id="imp-arq"></div>
         <div id="imp-map"></div>
         <div id="imp-prev" class="small"></div>`,
@@ -1793,7 +1835,9 @@
             <div class="secao" style="margin-top:4px">Confira as colunas</div>
             <div class="row" style="flex-wrap:wrap">${CAMPOS_IMP.map(([k, r]) => `<div class="field" style="min-width:210px"><label>${r}</label><select class="input" data-map="${k}">${ops(mapa[k])}</select></div>`).join('')}</div>
             <div class="row" style="flex-wrap:wrap">
-              <div class="field" style="min-width:210px"><label>Ingresso quando não der para identificar</label><select class="input" id="imp-tipo"><option value="padrao">Padrão</option><option value="vip">VIP</option></select></div>
+              <div class="field" style="min-width:230px"><label>Produto quando não der para identificar</label><select class="input" id="imp-tipo">
+              ${(S.config.produtos || []).map((pr) => `<option value="${esc(pr.id)}">${esc(pr.nome)}</option>`).join('')}
+              <option value="padrao">Outro — entra como Padrão</option><option value="vip">Outro — entra como VIP</option></select></div>
               <label class="check" style="min-width:210px;align-self:center"><input type="checkbox" id="imp-so-aprov" checked><span>Importar só compras <b>aprovadas/completas</b> (ignora reembolsadas, canceladas, aguardando pagamento)</span></label>
             </div>`;
           $map.querySelectorAll('select[data-map]').forEach((s2) => s2.addEventListener('change', () => { mapa[s2.dataset.map] = Number(s2.value); montar(); }));
@@ -1814,11 +1858,15 @@
             const stn = norm(st);
             if (soAprov && st && (STATUS_FORA.test(stn) || !STATUS_OK.test(stn))) { resumo.fora++; return; }
             const prod = v(r, 'produto');
-            let tipo = padrao;
+            const cfgProds = S.config.produtos || [];
+            const padraoCfg = cfgProds.find((x) => x.id === padrao);
+            let tipo = padraoCfg ? padraoCfg.tipo : padrao;
+            let origem = padraoCfg ? padraoCfg.nome : '';
             if (prod) {
-              if (prod.includes(idVip()) || /vip/i.test(prod)) tipo = 'vip';
-              else if (prod.includes(idPad())) tipo = 'padrao';
-              else if (/^\d{5,}$/.test(prod)) { resumo.outros++; return; } // outro produto da conta
+              const achado = cfgProds.find((x) => prod.includes(x.id)) || cfgProds.find((x) => norm(prod).includes(norm(x.nome)));
+              if (achado) { tipo = achado.tipo; origem = achado.nome; }
+              else if (/vip/i.test(prod)) tipo = 'vip';
+              else if (/^\d{5,}$/.test(prod)) { resumo.outros++; return; } // produto que não está na lista
             }
             let tel = v(r, 'telefone');
             const ddd = v(r, 'ddd').replace(/\D/g, '');
@@ -1830,7 +1878,7 @@
             const m = dt.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
             if (m) criado = `${m[3]}-${m[2]}-${m[1]}T${m[4] || '12'}:${m[5] || '00'}:00`;
             else if (/^\d{4}-\d{2}-\d{2}/.test(dt)) criado = dt.slice(0, 19).replace(' ', 'T');
-            linhas.push({ nome, email: v(r, 'email'), telefone: tel, cidade: v(r, 'cidade'), transacao: v(r, 'transacao'), tipo_ingresso: tipo, status_hotmart: st, criado_em: criado });
+            linhas.push({ nome, email: v(r, 'email'), telefone: tel, cidade: v(r, 'cidade'), transacao: v(r, 'transacao'), tipo_ingresso: tipo, origem_evento: origem, status_hotmart: st, criado_em: criado });
           });
           const vip = linhas.filter((l) => l.tipo_ingresso === 'vip').length;
           const semTel = linhas.filter((l) => soDig(l.telefone).length < 10).length;
@@ -1966,7 +2014,7 @@
     abrirSheet({
       titulo: 'Puxar compras da Hotmart (API)',
       corpo: `
-        <p class="small muted" style="margin-top:0">Busca todas as compras aprovadas dos ingressos <b>${esc(S.config.id_padrao || '8502151')}</b> (Padrão) e <b>${esc(S.config.id_vip || '8502486')}</b> (VIP) direto na Hotmart, com nome, e-mail e telefone. Quem já está no sistema é ignorado, e compras reembolsadas/canceladas movem o lead para Reembolso.</p>
+        <p class="small muted" style="margin-top:0">Busca todas as compras aprovadas destes produtos direto na Hotmart, com nome, e-mail e telefone: ${(S.config.produtos || []).map((pr) => `<b>${esc(pr.nome)}</b> (${esc(pr.id)})`).join(', ') || '<b>nenhum produto cadastrado</b>'}. Quem já está no sistema é ignorado, e compras reembolsadas/canceladas movem o lead para Reembolso.</p>
         <div class="cliente-box ${st.configurada ? 'mdl' : 'exmdl'}"><b>Credencial</b>${st.configurada ? 'Configurada (' + esc(st.client_id) + ')' : 'Ainda não configurada'}</div>
         <details ${st.configurada ? '' : 'open'} style="margin-bottom:12px">
           <summary class="small" style="cursor:pointer;font-weight:700;margin-bottom:10px">${st.configurada ? 'Trocar credencial' : 'Cadastrar credencial'}</summary>
@@ -1995,7 +2043,8 @@
           try {
             const r = await api('admin.hotmart.importar', { desde: sh.querySelector('#h-desde').value, simular });
             res.innerHTML = `<div class="cliente-box ${simular ? 'exmdl' : 'mdl'}"><b>${simular ? 'Simulação — nada foi gravado' : 'Importação concluída'}</b>
-              ${r.encontradas} compras aprovadas na Hotmart desde ${esc(String(r.desde).split('-').reverse().join('/'))} (Padrão: ${r.por_produto.padrao || 0} · VIP: ${r.por_produto.vip || 0})<br>
+              ${r.encontradas} compras aprovadas na Hotmart desde ${esc(String(r.desde).split('-').reverse().join('/'))}<br>
+              <span class="small">${Object.entries(r.por_produto || {}).map(([k, n]) => esc(k) + ': ' + n).join(' · ')}</span><br>
               <b style="display:inline;text-transform:none;font-size:14px">${r.importados} ${simular ? 'seriam importados' : 'novos leads'}</b> (${r.vip} VIP) · ${r.duplicados} já existiam${r.viraram_vip ? ` · ${r.viraram_vip} ${simular ? (r.viraram_vip > 1 ? 'virariam' : 'viraria') : (r.viraram_vip > 1 ? 'viraram' : 'virou')} VIP` : ''}${r.sem_telefone ? ` · <span style="color:var(--vermelho)">${r.sem_telefone} sem telefone</span>` : ''}<br>
               ${r.canceladas} compras canceladas/reembolsadas na Hotmart · ${r.reembolsos_marcados} ${simular ? 'iriam' : 'foram'} para Reembolso
               ${r.exemplos.length ? `<div class="small" style="margin-top:6px">${r.exemplos.map((x) => '• ' + esc(x)).join('<br>')}</div>` : ''}</div>`;
@@ -2096,6 +2145,13 @@
       case 'editar-mensagem': abrirFormMensagem(id); break;
       case 'sair': api('logout').catch(() => {}); sairLocal(); break;
       case 'copiar-dados': copiarTexto(document.getElementById('wd-url').value); break;
+      case 'add-produto-hot': {
+        const box = document.getElementById('cfg-produtos');
+        box.insertAdjacentHTML('beforeend', linhaProduto({ id: '', nome: '', tipo: 'padrao' }));
+        box.lastElementChild.querySelector('[data-p="id"]').focus();
+        break;
+      }
+      case 'del-produto-hot': el.closest('.prod-linha').remove(); break;
       case 'imp-checkin': abrirImportarMarcos('checkin'); break;
       case 'imp-confirmacao': abrirImportarMarcos('confirmacao'); break;
       case 'imp-diagnostico': abrirImportarMarcos('diagnostico'); break;
@@ -2107,7 +2163,12 @@
       }
       case 'salvar-config':
         comBotao(el, async () => {
-          S.config = await api('admin.config', { config: { HOTMART_ID_PADRAO: document.getElementById('cfg-pad').value, HOTMART_ID_VIP: document.getElementById('cfg-vip').value, BASE_CLIENTES_ID: document.getElementById('cfg-base').value, HOTMART_MODO_TESTE: document.getElementById('cfg-teste').checked ? 'SIM' : 'NAO',
+          const prods = [...document.querySelectorAll('#cfg-produtos .prod-linha')].map((el) => [
+            el.querySelector('[data-p="id"]').value.trim(),
+            el.querySelector('[data-p="nome"]').value.trim(),
+            el.querySelector('[data-p="tipo"]').value
+          ]).filter((x) => x[0]).map((x) => x.join(';')).join('\n');
+          S.config = await api('admin.config', { config: { HOTMART_PRODUTOS: prods, BASE_CLIENTES_ID: document.getElementById('cfg-base').value, HOTMART_MODO_TESTE: document.getElementById('cfg-teste').checked ? 'SIM' : 'NAO',
             UPGRADE_VIP_URL: document.getElementById('cfg-upg').value.trim(), UPGRADE_VIP_VALOR: document.getElementById('cfg-upg-val').value.trim(),
             DIAGNOSTICO_URL: document.getElementById('cfg-diag').value.trim(), EVENTO_DATA: document.getElementById('cfg-evento').value,
             DISTRIBUICAO_AUTO: document.getElementById('cfg-dist').checked ? 'SIM' : 'NAO' } });
