@@ -13,6 +13,7 @@
   let rnd = 7;
   const r = () => { rnd = (rnd * 16807) % 2147483647; return rnd / 2147483647; };
   const pick = (a) => a[Math.floor(r() * a.length)];
+  const PERP = /perpetuo|perp/i.test(location.search);
 
   const U = [
     { id: 'U1', nome: 'Coordenação 4blue', email: 'coord@demo.com', perfil: 'coordenador', foto: '', ativo: 'SIM', recebe_leads: 'NAO' },
@@ -25,14 +26,20 @@
     { id: 'P2', nome: 'Produto B (exemplo)', valor_total: '4750', valor_entrada: '', parcelas: '12x', descricao: '', ativo: 'SIM', origem: 'coordenador', criado_por: 'Coordenação' },
     { id: 'P3', nome: 'Produto C (exemplo)', valor_total: '1997', valor_entrada: '1997', parcelas: 'à vista', descricao: '', ativo: 'SIM', origem: 'coordenador', criado_por: 'Coordenação' }
   ];
-  const F = [
+  const F = (PERP ? [
+    ['Boas-vindas', '#0369B1', 'Abrir a conversa no WhatsApp\nApresentar-se como concierge\nConfirmar que recebeu o acesso do produto'],
+    ['Ativação', '#F8B90C', 'Confirmar que já começou o curso\nTirar as primeiras dúvidas\nCombinar um retorno'],
+    ['Entender o momento', '#0B7A9E', 'Perguntar sobre a empresa e a principal dor\nRegistrar o que descobriu nas anotações'],
+    ['Oferta', '#C2410C', 'Apresentar o produto certo para o momento\nEnviar proposta ou link'],
+    ['Negociação', '#12A150', 'Responder às objeções\nFechar ou registrar o motivo da perda']
+  ] : [
     ['Primeiro contato', '#0369B1', 'Abrir a conversa no WhatsApp\nApresentar-se como concierge do lead\nConfirmar que recebeu o acesso do ingresso'],
     ['Confirmação de presença', '#F8B90C', 'Confirmar presença no Workshop\nExplicar horário, formato e o que levar\nMarcar o marco "Confirmou presença"'],
     ['Upgrade VIP', '#7A4CC2', 'Apresentar os benefícios do VIP\nEnviar o link de upgrade\nConferir se o pagamento foi feito'],
     ['Diagnóstico', '#0B7A9E', 'Enviar o link do diagnóstico\nLembrar quem não respondeu\nLer as respostas antes da reunião'],
     ['Reunião', '#C2410C', 'Agendar a reunião\nConfirmar 1 dia antes\nRegistrar o combinado nas anotações'],
     ['Oferta e venda', '#12A150', 'Apresentar a oferta certa para o momento do lead\nRegistrar negócio ganho ou perdido']
-  ].map((f, i) => ({ id: 'F' + (i + 1), nome: f[0], cor: f[1], instrucoes: f[2], ordem: String(i + 1), ativo: 'SIM' }));
+  ]).map((f, i) => ({ id: 'F' + (i + 1), nome: f[0], cor: f[1], instrucoes: f[2], ordem: String(i + 1), ativo: 'SIM' }));
 
   const M = [
     { id: 'M1', titulo: 'Boas-vindas', fase_id: 'F1', ordem: '1', ativo: 'SIM', tipo_ingresso: 'todos', texto: 'Oi {primeiro_nome}, tudo bem? Aqui é {usuario}, da 4blue! Vi que você garantiu seu ingresso para o Workshop do dia 07/10 e queria te dar as boas-vindas. Posso te fazer uma pergunta rápida?' },
@@ -57,7 +64,7 @@
       nome: n, email, telefone: '55' + pick(['11', '41', '62', '21', '85', '19']) + '9' + String(10000000 + Math.floor(r() * 89999999)),
       cidade: pick(cidades), empresa: '', obs: '', status: 'novo', responsavel_id: '', responsavel_nome: '', inicio_tratativa: '', ultima_acao: '',
       fechado_em: '', motivo: '', mensagem_usada: '', transacao: 'HP' + (1700000000 + i * 7919), produto_hotmart: vip ? '8502486' : '8502151',
-      origem_evento: i % 4 === 3 ? 'Workshop Online de Gestão de Pessoas' : (vip ? 'Workshop presencial 07/10 — VIP' : 'Workshop presencial 07/10 — Padrão'),
+      origem_evento: PERP ? 'Curso Pró-labore e Distribuição de Lucros (PLR)' : (i % 4 === 3 ? 'Workshop Online de Gestão de Pessoas' : (vip ? 'Workshop presencial 07/10 — VIP' : 'Workshop presencial 07/10 — Padrão')),
       valor_ingresso: vip ? '997' : '197', status_hotmart: 'APPROVED', cliente_mdl: '', cliente_ilu: '', eventos: '', cargo: pick(['Dono / Sócio', 'Dono / Sócio', 'Diretor', 'Gerente']),
       faturamento: pick(fats), criado_por: i % 9 === 0 ? 'Ana Ribeiro' : 'Hotmart', atualizado_em: '',
       fase_id: '', fase_em: '', confirmado: '', confirmado_em: '', upgrade: '', upgrade_em: '', diagnostico: '', diagnostico_em: '',
@@ -100,6 +107,8 @@
     }
     if (fi >= 4) { l.reuniao = r() < 0.7 ? 'feita' : 'agendada'; l.reuniao_em = l.ultima_acao; if (l.reuniao === 'feita') l.reuniao_obs = 'Entende que precisa organizar o financeiro. Ficou de conversar com o sócio.'; }
     if (r() < 0.3) { l.checkin = 'sim'; l.checkin_em = l.ultima_acao; }
+    l.boas_vindas = pick(['enviada', 'respondeu', 'respondeu', 'sem_resposta']); l.boas_vindas_em = l.inicio_tratativa;
+    if (fi >= 1) { l.acesso = r() < 0.7 ? 'sim' : 'nao'; l.acesso_em = l.ultima_acao; }
     const x = i % 7 === 3 ? 0.1 : (i % 7 === 5 ? 0.45 : (i % 11 === 7 ? 0.58 : 0.9));
     if (x < 0.35) {
       const p = pick(P);
@@ -137,17 +146,26 @@
       produtos: copia(P.filter((p) => c || p.ativo === 'SIM')),
       mensagens: copia(M.filter((m) => c || m.ativo === 'SIM')),
       fases: copia(F.filter((f) => c || f.ativo === 'SIM')),
+      sistema: config.nome_sistema,
+      modo: PERP ? 'perpetuo' : 'evento',
+      marcos: config.marcos_ativos,
+      pode_gerenciar: c || config.quem_gerencia === 'todos',
       links: { upgrade: config.upgrade_url, upgrade_valor: config.upgrade_valor, diagnostico: config.diagnostico_url, evento: config.evento_data }
     };
   };
-  const config = { produtos: [
+  const config = {
+    nome_sistema: PERP ? 'Leads - Perpétuo' : 'Leads - Workshop pago [2026.10.07]',
+    modo: PERP ? 'perpetuo' : 'evento',
+    marcos_ativos: PERP ? ['boas_vindas', 'acesso', 'reuniao'] : ['confirmado', 'upgrade', 'diagnostico', 'reuniao', 'checkin'],
+    quem_gerencia: PERP ? 'todos' : 'coordenador',
+    produtos: PERP ? [{ id: '6790181', nome: 'Curso Pró-labore e Distribuição de Lucros (PLR)', tipo: 'padrao' }] : [
       { id: '8502151', nome: 'Workshop presencial 07/10 — Padrão', tipo: 'padrao' },
       { id: '8502486', nome: 'Workshop presencial 07/10 — VIP', tipo: 'vip' },
       { id: '4195296', nome: 'Workshop Online de Gestão de Pessoas', tipo: 'padrao' }
     ],
     upgrade_url: 'https://pay.hotmart.com/exemplo-upgrade-vip', upgrade_valor: '50', diagnostico_url: 'https://forms.exemplo.com/diagnostico', evento_data: '2026-10-07', distribuicao_auto: false,
     webhook_dados: 'https://script.google.com/macros/s/SEU_ID/exec?src=dados&key=CHAVE&tipo=diagnostico',
-    webhook: 'https://script.google.com/macros/s/SEU_ID/exec?src=hotmart&key=CHAVE', id_padrao: '8502151', id_vip: '8502486', base_id: '1ihgdFxaR5cM6xyAECvJ-IORN1dmghRin9gmRFCsHe5I', ultima_sincronizacao: atras(0.4), modo_teste: false, hotmart_api: { configurada: false, client_id: '' },
+    webhook: 'https://script.google.com/macros/s/SEU_ID/exec?src=hotmart&key=CHAVE', id_padrao: '8502151', id_vip: '8502486', base_id: '1ihgdFxaR5cM6xyAECvJ-IORN1dmghRin9gmRFCsHe5I', ultima_sincronizacao: atras(0.4), diag_planilha_id: '1XZ1PFVywi1fCAkkTFsjlFtLZPgP-UwSMIpIrsvfmRqY', diag_aba: 'Diagnosticos', diag_ultima_sinc: atras(0.2), modo_teste: false, hotmart_api: { configurada: false, client_id: '' },
     webhooks: [{ recebido_em: atras(0.2), evento: 'PURCHASE_APPROVED', produto: '8502486', transacao: 'HP1700102947', email: 'felipe.cardoso@exemplo.com', status: 'ok', resultado: 'Lead criado: L113' },
       { recebido_em: atras(1), evento: 'PURCHASE_CHARGEBACK', produto: '0', transacao: 'HP16015479281022', email: 'teste@example.com', status: 'ignorado', resultado: 'produto de teste da Hotmart (id 0) — ative o modo teste para aceitar' }] };
 
@@ -227,6 +245,11 @@
       hist(l.id, u, 'marco', b.campo + ': ' + (b.valor || 'limpo'));
       return copia(l);
     },
+    'fase.salvar': (b) => rotas['admin.fase.salvar'](b),
+    'fase.excluir': (b) => rotas['admin.fase.excluir'](b),
+    'produto.salvar': (b, u) => rotas['admin.produto.salvar'](b, u),
+    'mensagem.salvar': (b) => rotas['admin.mensagem.salvar'](b),
+    'mensagem.excluir': (b) => rotas['admin.mensagem.excluir'](b),
     'admin.fase.salvar': (b) => {
       const d = b.fase;
       if (d.id) { const x = F.find((y) => y.id === d.id); Object.assign(x, d); return copia(x); }
@@ -308,6 +331,17 @@
         canceladas: 2, reembolsos_marcados: 1, desde: b.desde, exemplos: novos.map((n, i) => n + ' · (11) 9' + (8000 + i) + '-0000 · ' + (i === 1 ? 'vip' : 'padrao')) };
     },
     'admin.sincronizar': () => { config.ultima_sincronizacao = agora(); return { clientes: 18432, leads_atualizados: 3, em: agora() }; },
+    'admin.diagnostico.sincronizar': () => {
+      config.diag_ultima_sinc = agora();
+      let n = 0;
+      L.filter((l) => l.status === 'tratativa').slice(0, 4).forEach((l) => {
+        if (l.diagnostico_respostas) return;
+        l.diagnostico = 'feito'; l.diagnostico_em = agora();
+        l.diagnostico_respostas = JSON.stringify({ 'Índice geral': String(40 + Math.floor(r() * 45)), 'Faturamento atual': l.faturamento, 'Finanças (%)': String(30 + Math.floor(r() * 50)), 'Vendas (%)': String(30 + Math.floor(r() * 50)) });
+        n++;
+      });
+      return { aba: 'Diagnosticos', linhas: 128, pessoas: 97, encontrados: n + 6, atualizados: n, ja_estavam: 6, sem_lead: 31, exemplos_sem_lead: ['Fulano de Tal', 'ciclano@exemplo.com'], em: agora() };
+    },
     'admin.processarFila': () => ({ processados: 0 }),
     'admin.config': (b) => {
       const c = b.config || {};
@@ -321,6 +355,9 @@
       if (c.DIAGNOSTICO_URL !== undefined) config.diagnostico_url = c.DIAGNOSTICO_URL;
       if (c.EVENTO_DATA) config.evento_data = c.EVENTO_DATA;
       if (c.DISTRIBUICAO_AUTO) config.distribuicao_auto = c.DISTRIBUICAO_AUTO === 'SIM';
+      if (c.NOME_SISTEMA) config.nome_sistema = c.NOME_SISTEMA;
+      if (c.QUEM_GERENCIA) config.quem_gerencia = c.QUEM_GERENCIA;
+      if (c.MARCOS_ATIVOS !== undefined) config.marcos_ativos = String(c.MARCOS_ATIVOS).split(',').filter(Boolean);
       return copia(config);
     }
   };

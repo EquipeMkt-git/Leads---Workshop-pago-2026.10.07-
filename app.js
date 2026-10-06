@@ -23,6 +23,7 @@
   const S = {
     token: null, user: null, modo: 'usuario', view: 'novo',
     leads: [], vendas: [], produtos: [], mensagens: [], usuarios: [], historico: [], config: {}, fases: [], links: {},
+    modoSistema: 'evento', marcosAtivos: null, podeGerenciar: false, nomeSistema: '',
     busca: '', filtro: 'todos', limite: 60,
     adm: { status: 'todos', resp: 'todos', tipo: 'todos', cliente: 'todos', origem: 'todos' },
     painel: { resp: 'todos', tipo: 'todos', origem: 'todos' },
@@ -97,8 +98,19 @@
   const ehCliente = (l) => !!(l.cliente_mdl || l.cliente_ilu);
   const vendasDoLead = (id) => S.vendas.filter((v) => v.lead_id === id);
   const faseDe = (l) => S.fases.find((f) => f.id === l.fase_id) || null;
+  const usaVip = () => S.modoSistema !== 'perpetuo';
+  function indiceDiag(l) {
+    if (!l.diagnostico_respostas) return '';
+    try {
+      const o = JSON.parse(l.diagnostico_respostas);
+      return o['Índice geral'] || o['indice_geral'] || '';
+    } catch (e) { return ''; }
+  }
+  const marcosDoSistema = () => (S.marcosAtivos && S.marcosAtivos.length ? S.marcosAtivos.filter((k) => MARCOS_INFO[k]) : Object.keys(MARCOS_INFO));
   const fasesAtivas = () => S.fases.filter((f) => f.ativo !== 'NAO');
   const MARCOS_INFO = {
+    boas_vindas: { rot: 'Boas-vindas', vals: { enviada: ['Boas-vindas enviada', 'evento'], respondeu: ['Respondeu', 'ok'], sem_resposta: ['Sem resposta', 'alerta'] } },
+    acesso: { rot: 'Acesso ao produto', vals: { sim: ['Acessou o produto', 'ok'], nao: ['Ainda não acessou', 'alerta'] } },
     confirmado: { rot: 'Presença', ic: 'check', vals: { sim: ['Confirmou presença', 'ok'], nao: ['Não vai participar', 'alerta'] } },
     upgrade: { rot: 'Upgrade VIP', ic: 'estrela', vals: { enviado: ['Upgrade enviado', 'evento'], feito: ['Fez upgrade VIP', 'vip'], nao_quer: ['Recusou o upgrade', ''] } },
     diagnostico: { rot: 'Diagnóstico', ic: 'leads', vals: { enviado: ['Diagnóstico enviado', 'evento'], feito: ['Diagnóstico feito', 'ok'] } },
@@ -207,6 +219,10 @@
       S.mensagens = d.mensagens || [];
       S.fases = d.fases || [];
       S.links = d.links || {};
+      S.modoSistema = d.modo || 'evento';
+      S.marcosAtivos = d.marcos || null;
+      S.podeGerenciar = !!d.pode_gerenciar;
+      if (d.sistema) { S.nomeSistema = d.sistema; document.title = d.sistema; }
       if (d.usuarios) S.usuarios = d.usuarios;
       if (d.historico) S.historico = d.historico;
       if (d.config) S.config = d.config;
@@ -267,13 +283,15 @@
       ];
     }
     const meu = (st) => S.leads.filter((l) => l.status === st && (st === 'novo' || l.responsavel_id === S.user.id)).length;
-    return [
+    const itens = [
       { id: 'novo', rot: 'Contatos', ic: I.contatos, n: meu('novo') },
       { id: 'funil', rot: 'Funil', ic: I.funil, n: meu('tratativa') },
       { id: 'ganho', rot: 'Ganhos', ic: I.trofeu, n: meu('ganho') },
       { id: 'perdido', rot: 'Perdidos', ic: I.xcirc, n: meu('perdido') },
       { id: 'reembolso', rot: 'Reembolso', ic: I.volta, n: meu('reembolso') }
     ];
+    if (S.podeGerenciar) itens.push({ id: 'catalogo', rot: 'Fases', ic: I.caixa });
+    return itens;
   }
 
   function avatarHtml(u, cls = '') {
@@ -316,7 +334,7 @@
     if (!tb) return;
     const sub = S.modo === 'coord' ? 'Área do coordenador' : 'Olá, ' + esc(primeiroNome(S.user.nome));
     tb.innerHTML = `
-      <div class="titulo"><h1>${esc(CFG.NOME || 'Leads')}</h1><div class="sub">${sub}</div></div>
+      <div class="titulo"><h1>${esc(S.nomeSistema || CFG.NOME || 'Leads')}</h1><div class="sub">${sub}</div></div>
       ${souCoord() ? `<button class="modo" title="Alternar área">${I.troca}${S.modo === 'coord' ? 'Atender' : 'Coordenar'}</button>` : ''}
       <button class="ref" title="Atualizar" aria-label="Atualizar">${I.refresh}</button>
       ${avatarHtml(S.user)}`;
@@ -325,7 +343,8 @@
   function renderNav() {
     const nav = document.getElementById('nav');
     if (!nav) return;
-    nav.innerHTML = `<div class="nav-brand"><div class="logo-mark"><span></span></div><b>${esc(CFG.NOME || '')}</b></div>` +
+    nav.classList.toggle('n6', navItens().length > 5);
+    nav.innerHTML = `<div class="nav-brand"><div class="logo-mark"><span></span></div><b>${esc(S.nomeSistema || CFG.NOME || '')}</b></div>` +
       navItens().map((n) => `<button data-view="${n.id}" class="${S.view === n.id ? 'on' : ''}">${n.ic}<span class="lbl">${n.rot}</span>${n.n ? `<span class="cnt">${n.n > 999 ? '999+' : n.n}</span>` : ''}</button>`).join('');
   }
 
@@ -345,6 +364,8 @@
       else if (v === 'ajustes') m.innerHTML = viewAjustes();
     } else if (v === 'funil') {
       m.innerHTML = viewFunil();
+    } else if (v === 'catalogo') {
+      m.innerHTML = viewCatalogo();
     } else {
       m.innerHTML = viewLista(v);
     }
@@ -387,7 +408,8 @@
         <div><b class="num">${brlCurto(minhasVendas.reduce((s, v) => s + num(v.valor_total), 0))}</b><span>Vendido</span></div>
       </div>`;
 
-    const chipsDef = [['todos', 'Todos'], ['vip', 'VIP'], ['padrao', 'Padrão'], ['clientes', 'Clientes'], ['eventos', 'Já foi a eventos']];
+    const chipsDef = [['todos', 'Todos']].concat(usaVip() ? [['vip', 'VIP'], ['padrao', 'Padrão']] : [])
+      .concat([['clientes', 'Clientes'], ['eventos', 'Já foi a eventos']]);
     if (st === 'tratativa') chipsDef.push(['parados', 'Parados +48h']);
     const chips = chipsDef.map(([k, r]) => `<button class="chip ${S.filtro === k ? 'on' : ''}" data-chip="${k}">${r}<span class="n">${aplicaFiltroChip(aplicaBusca(base), k).length}</span></button>`).join('');
 
@@ -418,7 +440,7 @@
           <button class="btn sm amarelo" data-act="novo-lead">${I.mais}Lead</button>
         </div></div>
       <div class="busca">${I.busca}<input class="input" data-busca placeholder="Buscar nome, telefone, e-mail, cidade" value="${esc(S.busca)}"></div>
-      <div class="chips">${[['todos', 'Todos'], ['vip', 'VIP'], ['padrao', 'Padrão'], ['clientes', 'Clientes'], ['parados', 'Parados +48h']]
+      <div class="chips">${[['todos', 'Todos']].concat(usaVip() ? [['vip', 'VIP'], ['padrao', 'Padrão']] : []).concat([['clientes', 'Clientes'], ['parados', 'Parados +48h']])
         .map(([k, r]) => `<button class="chip ${S.filtro === k ? 'on' : ''}" data-chip="${k}">${r}<span class="n">${aplicaFiltroChip(aplicaBusca(base), k).length}</span></button>`).join('')}</div>`;
     if (!lista.length) return cabecalho + vazio('tratativa');
     if (S.funilLista) {
@@ -451,8 +473,8 @@
 
   function tagsLead(l, completo) {
     const t = [];
-    t.push(l.tipo_ingresso === 'vip' ? `<span class="tag vip">${I.estrela}VIP</span>` : '<span class="tag padrao">Padrão</span>');
-    Object.keys(MARCOS_INFO).forEach((k) => {
+    if (usaVip()) t.push(l.tipo_ingresso === 'vip' ? `<span class="tag vip">${I.estrela}VIP</span>` : '<span class="tag padrao">Padrão</span>');
+    marcosDoSistema().forEach((k) => {
       const v = MARCOS_INFO[k].vals[l[k]];
       if (v) t.push(`<span class="tag ${v[1]}" title="${esc(MARCOS_INFO[k].rot)}">${esc(v[0])}</span>`);
     });
@@ -460,7 +482,12 @@
     if (mdl) t.push(`<span class="tag ${mdl.cls}" title="${esc(mdl.titulo)}">${esc(mdl.curto)}</span>`);
     const ilu = rotuloCliente(l.cliente_ilu, 'ILU');
     if (ilu) t.push(`<span class="tag ${ilu.cls}" title="${esc(ilu.titulo)}">${esc(ilu.curto)}</span>`);
-    if (l.origem_evento) t.push(`<span class="tag origem" title="Origem do lead">${esc(String(l.origem_evento).split('—')[0].trim())}</span>`);
+    if (l.origem_evento) {
+      const o = String(l.origem_evento).split('—')[0].trim();
+      t.push(`<span class="tag origem" title="${esc(l.origem_evento)}">${esc(o.length > 30 ? o.slice(0, 29) + '…' : o)}</span>`);
+    }
+    const ind = indiceDiag(l);
+    if (ind) t.push(`<span class="tag ok" title="Índice do diagnóstico">Índice ${esc(ind)}</span>`);
     const ev = eventosDe(l);
     if (ev.length) t.push(`<span class="tag evento">${ev.length} evento${ev.length > 1 ? 's' : ''}</span>`);
     if (l.status === 'tratativa' && horasDesde(l.ultima_acao || l.inicio_tratativa) > 48) t.push(`<span class="tag alerta">${I.relogio}Parado ${rel(l.ultima_acao || l.inicio_tratativa).replace('há ', '')}</span>`);
@@ -732,7 +759,7 @@
   }
 
   function blocoMarcos(l) {
-    const linhas = Object.keys(MARCOS_INFO).map((k) => {
+    const linhas = marcosDoSistema().map((k) => {
       const info = MARCOS_INFO[k];
       const v = info.vals[l[k]];
       return `<button class="marco ${v ? 'on' : ''}" data-act="marco" data-id="${l.id}" data-campo="${k}">
@@ -740,7 +767,7 @@
         <span class="mk-txt"><b>${info.rot}</b><span>${v ? esc(v[0]) + (l[k + '_em'] ? ' · ' + fmtData(l[k + '_em'], false) : '') : 'marcar'}</span></span></button>`;
     }).join('');
     const links = [];
-    if (S.links.upgrade) links.push(`<button class="btn line sm wrap" data-act="copiar-upgrade">${I.copiar}Copiar link do upgrade VIP (R$ ${esc(S.links.upgrade_valor || '50')})</button>`);
+    if (S.links.upgrade && marcosDoSistema().indexOf('upgrade') >= 0) links.push(`<button class="btn line sm wrap" data-act="copiar-upgrade">${I.copiar}Copiar link do upgrade VIP (R$ ${esc(S.links.upgrade_valor || '50')})</button>`);
     if (S.links.diagnostico) links.push(`<button class="btn line sm wrap" data-act="copiar-diag">${I.copiar}Copiar link do diagnóstico</button>`);
     return `<div class="secao">Marcos do lead</div><div class="marcos">${linhas}</div>
       ${links.length ? `<div class="links-marco">${links.join('')}</div>` : ''}`;
@@ -787,7 +814,7 @@
         <form id="f-lead" autocomplete="off">
           ${campo('nome', 'Nome *', 'required')}
           <div class="row">${campo('telefone', 'WhatsApp', 'inputmode="tel" placeholder="(11) 99999-9999"')}${campo('email', 'E-mail', 'type="email" inputmode="email"')}</div>
-          <div class="field"><label>Ingresso</label>
+          <div class="field ${usaVip() ? '' : 'hidden'}"><label>Ingresso</label>
             <div class="seg" id="seg-tipo"><button type="button" data-v="padrao" class="${tipo === 'padrao' ? 'on' : ''}">Padrão</button><button type="button" data-v="vip" class="${tipo === 'vip' ? 'on' : ''}">VIP</button></div></div>
           <div class="row">${campo('cidade', 'Cidade')}${campo('empresa', 'Empresa')}</div>
           <div class="row">${campo('cargo', 'Cargo')}${campo('faturamento', 'Faturamento')}</div>
@@ -1139,7 +1166,7 @@
       <div class="filtros-linha">
         <select class="input" data-painel="resp"><option value="todos">Toda a equipe</option>${opsResp}</select>
         <select class="input" data-painel="origem"><option value="todos">Todas as origens</option>${origensLeads().map((o) => `<option value="${esc(o)}" ${P.origem === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>
-        <select class="input" data-painel="tipo"><option value="todos" ${P.tipo === 'todos' ? 'selected' : ''}>Padrão + VIP</option><option value="padrao" ${P.tipo === 'padrao' ? 'selected' : ''}>Só Padrão</option><option value="vip" ${P.tipo === 'vip' ? 'selected' : ''}>Só VIP</option></select>
+        ${usaVip() ? `<select class="input" data-painel="tipo"><option value="todos" ${P.tipo === 'todos' ? 'selected' : ''}>Padrão + VIP</option><option value="padrao" ${P.tipo === 'padrao' ? 'selected' : ''}>Só Padrão</option><option value="vip" ${P.tipo === 'vip' ? 'selected' : ''}>Só VIP</option></select>` : ''}
       </div>
       <div class="kpis">
         <div class="card kpi destaque span2"><div class="k-lbl">Receita total vendida</div><div class="k-val">${brl(c.receita)}</div><div class="k-sub">Entradas: <b style="color:#fff">${brl(c.entradas)}</b> · ${c.nVendas} venda${c.nVendas === 1 ? '' : 's'} · ticket médio ${brl(c.nVendas ? c.receita / c.nVendas : 0)}</div></div>
@@ -1190,14 +1217,17 @@
           <h3>Marcos da jornada</h3>
           ${(() => {
             const total = leads.length || 1;
-            const itens = [
-              ['Confirmaram presença', leads.filter((l) => l.confirmado === 'sim').length, '#F8B90C'],
-              ['Fizeram upgrade VIP', leads.filter((l) => l.upgrade === 'feito').length, '#7A4CC2'],
-              ['Link do upgrade enviado', leads.filter((l) => l.upgrade === 'enviado').length, '#B39DDB'],
-              ['Diagnóstico respondido', leads.filter((l) => l.diagnostico === 'feito').length, '#0B7A9E'],
-              ['Reunião realizada', leads.filter((l) => l.reuniao === 'feita').length, '#C2410C'],
-              ['Participaram do Workshop', leads.filter((l) => l.checkin === 'sim').length, '#12A150']
-            ];
+            const todos = {
+              boas_vindas: [['Responderam as boas-vindas', 'respondeu', '#0369B1'], ['Sem resposta nas boas-vindas', 'sem_resposta', '#C7D0DB']],
+              acesso: [['Acessaram o produto', 'sim', '#0B7A9E']],
+              confirmado: [['Confirmaram presença', 'sim', '#F8B90C']],
+              upgrade: [['Fizeram upgrade VIP', 'feito', '#7A4CC2'], ['Link do upgrade enviado', 'enviado', '#B39DDB']],
+              diagnostico: [['Diagnóstico respondido', 'feito', '#0B7A9E']],
+              reuniao: [['Reunião realizada', 'feita', '#C2410C']],
+              checkin: [['Participaram do evento', 'sim', '#12A150']]
+            };
+            const itens = [];
+            marcosDoSistema().forEach((k) => (todos[k] || []).forEach(([rot, val, cor]) => itens.push([rot, leads.filter((l) => l[k] === val).length, cor])));
             return itens.map(([r, n, cor]) => barra(r, n, total, `${n} · ${pct(n, total)}`, cor)).join('');
           })()}
         </section>
@@ -1226,14 +1256,14 @@
           })()}
         </section>
 
-        <section class="card bloco">
+        ${!usaVip() ? '' : `<section class="card bloco">
           <h3>Padrão x VIP</h3>
           <div class="tabela-wrap"><table class="tabela" style="min-width:0">
             <thead><tr><th></th><th class="r">Leads</th><th class="r">Ganhos</th><th class="r">Conv.</th><th class="r">Vendido</th></tr></thead>
             <tbody>${tipos.map(({ t, s }) => `<tr><td>${t === 'vip' ? `<span class="tag vip">${I.estrela}VIP</span>` : '<span class="tag padrao">Padrão</span>'}</td>
               <td class="r num">${s.total}</td><td class="r num">${s.ganho}</td><td class="r num">${pct(s.ganho, s.trabalhados)}</td><td class="r num"><b>${brlCurto(s.receita)}</b></td></tr>`).join('')}</tbody>
           </table></div>
-        </section>
+        </section>`}
 
         <section class="card bloco">
           <h3>Leads x base de clientes</h3>
@@ -1306,7 +1336,7 @@
       <div class="chips">${chips}</div>
       <div class="filtros-linha">
         <select class="input" data-adm="resp"><option value="todos">Todos os responsáveis</option><option value="__sem" ${A.resp === '__sem' ? 'selected' : ''}>Sem responsável</option>${opsResp}</select>
-        <select class="input" data-adm="tipo">${sel('tipo', 'todos', 'Padrão + VIP')}${sel('tipo', 'padrao', 'Padrão')}${sel('tipo', 'vip', 'VIP')}</select>
+        ${usaVip() ? `<select class="input" data-adm="tipo">${sel('tipo', 'todos', 'Padrão + VIP')}${sel('tipo', 'padrao', 'Padrão')}${sel('tipo', 'vip', 'VIP')}</select>` : ''}
         <select class="input" data-adm="origem"><option value="todos">Todas as origens</option>${origensLeads().map((o) => `<option value="${esc(o)}" ${A.origem === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>
         <select class="input" data-adm="cliente">${sel('cliente', 'todos', 'Base: todos')}${sel('cliente', 'mdl', 'Cliente MDL ativo')}${sel('cliente', 'exmdl', 'Ex-MDL')}${sel('cliente', 'ilu', 'Base ILU')}${sel('cliente', 'eventos', 'Já foi a eventos')}${sel('cliente', 'nenhum', 'Não é cliente')}</select>
       </div>
@@ -1453,7 +1483,7 @@
         if (del) del.addEventListener('click', (ev) => {
           if (!confirm('Excluir esta fase? Os leads precisam estar em outras fases.')) return;
           comBotao(ev.currentTarget, async () => {
-            await api('admin.fase.excluir', { id });
+            await api('fase.excluir', { id });
             S.fases = S.fases.filter((x) => x.id !== id);
             fecharSheet(); toast('Fase excluída', 'ok'); renderMain();
           });
@@ -1462,7 +1492,7 @@
           const fo = sh.querySelector('#f-f');
           const dados = { id: id || '', cor: cor };
           ['nome', 'instrucoes', 'ordem', 'ativo'].forEach((k) => { dados[k] = fo.elements[k].value; });
-          const r = await api('admin.fase.salvar', { fase: dados });
+          const r = await api('fase.salvar', { fase: dados });
           const i = S.fases.findIndex((x) => x.id === r.id);
           if (i >= 0) S.fases[i] = Object.assign({}, S.fases[i], r); else S.fases.push(r);
           fecharSheet(); toast('Fase salva', 'ok'); renderMain();
@@ -1500,7 +1530,7 @@
           dados.valor_total = num(f.elements.valor_total.value);
           dados.valor_entrada = f.elements.valor_entrada.value ? num(f.elements.valor_entrada.value) : '';
           if (num(dados.valor_entrada) > dados.valor_total) throw new Error('A entrada não pode ser maior que o total.');
-          const r = await api('admin.produto.salvar', { produto: dados });
+          const r = await api('produto.salvar', { produto: dados });
           const i = S.produtos.findIndex((x) => x.id === r.id);
           if (i >= 0) S.produtos[i] = Object.assign({}, S.produtos[i], r); else S.produtos.push(r);
           fecharSheet(); toast('Produto salvo', 'ok'); renderMain();
@@ -1550,7 +1580,7 @@
         if (del) del.addEventListener('click', (ev) => {
           if (!confirm('Excluir esta mensagem?')) return;
           comBotao(ev.currentTarget, async () => {
-            await api('admin.mensagem.excluir', { id });
+            await api('mensagem.excluir', { id });
             S.mensagens = S.mensagens.filter((x) => x.id !== id);
             fecharSheet(); toast('Mensagem excluída', 'ok'); renderMain();
           });
@@ -1558,7 +1588,7 @@
         sh.querySelector('#m-ok').addEventListener('click', (ev) => comBotao(ev.currentTarget, async () => {
           const dados = { id: id || '' };
           ['titulo', 'texto', 'tipo_ingresso', 'fase_id', 'ordem', 'ativo'].forEach((k) => { dados[k] = f.elements[k].value; });
-          const r = await api('admin.mensagem.salvar', { mensagem: dados });
+          const r = await api('mensagem.salvar', { mensagem: dados });
           const i = S.mensagens.findIndex((x) => x.id === r.id);
           if (i >= 0) S.mensagens[i] = Object.assign({}, S.mensagens[i], r); else S.mensagens.push(r);
           fecharSheet(); toast('Mensagem salva', 'ok'); renderMain();
@@ -1616,15 +1646,29 @@
         </section>
 
         <section class="card bloco">
+          <h3>Este sistema</h3>
+          <div class="field"><label>Nome que aparece no topo</label><input class="input" id="cfg-nome" value="${esc(c.nome_sistema || '')}"></div>
+          <div class="field"><label>Quem cria fases, produtos e mensagens</label>
+            <select class="input" id="cfg-gerencia">
+              <option value="coordenador" ${c.quem_gerencia !== 'todos' ? 'selected' : ''}>Só o coordenador</option>
+              <option value="todos" ${c.quem_gerencia === 'todos' ? 'selected' : ''}>Coordenador e concierges</option>
+            </select></div>
+          <div class="label" style="margin-bottom:8px">Marcos que a equipe pode marcar em cada lead</div>
+          <div class="marcos-cfg">${Object.entries(MARCOS_INFO).map(([k, info]) => `
+            <label class="check" style="margin:0"><input type="checkbox" data-marco="${k}" ${(c.marcos_ativos || []).indexOf(k) >= 0 ? 'checked' : ''}><span>${esc(info.rot)}</span></label>`).join('')}</div>
+          <button class="btn line sm" data-act="salvar-config" data-loading=" Salvando...">Salvar</button>
+        </section>
+
+        <section class="card bloco">
           <h3>Links e funil</h3>
           <p class="small muted" style="margin-top:-6px">Estes links aparecem nos botões de copiar e nas variáveis das mensagens (<code>{link_upgrade}</code>, <code>{link_diagnostico}</code>).</p>
-          <div class="row">
+          ${(c.marcos_ativos || []).indexOf('upgrade') >= 0 ? `<div class="row">
             <div class="field"><label>Link do upgrade para VIP</label><input class="input" id="cfg-upg" value="${esc(c.upgrade_url || '')}" placeholder="https://pay.hotmart.com/..."></div>
             <div class="field" style="max-width:120px"><label>Valor (R$)</label><input class="input" id="cfg-upg-val" inputmode="decimal" value="${esc(c.upgrade_valor || '50')}"></div>
-          </div>
+          </div>` : ''}
           <div class="row">
             <div class="field"><label>Link do diagnóstico</label><input class="input" id="cfg-diag" value="${esc(c.diagnostico_url || '')}"></div>
-            <div class="field" style="max-width:170px"><label>Data do evento</label><input class="input" id="cfg-evento" type="date" value="${esc(c.evento_data || '')}"></div>
+            <div class="field" style="max-width:170px"><label>Data do evento (se houver)</label><input class="input" id="cfg-evento" type="date" value="${esc(c.evento_data || '')}"></div>
           </div>
           <label class="check"><input type="checkbox" id="cfg-dist" ${c.distribuicao_auto ? 'checked' : ''}><span><b>Distribuir automaticamente:</b> todo lead novo já entra para um concierge (o que tem menos leads em aberto). O coordenador só entra na fila se estiver marcado em Equipe.</span></label>
           <button class="btn line sm" data-act="salvar-config" data-loading=" Salvando...">Salvar</button>
@@ -1634,10 +1678,23 @@
           <h3>Dados de fora (diagnóstico, obrigado, check-in)</h3>
           <p class="small muted" style="margin-top:-6px">Use esta URL como webhook no formulário do diagnóstico, na automação da página de obrigado ou em qualquer ferramenta (Zapier, Make, ActiveCampaign). Troque <code>tipo=diagnostico</code> por <code>obrigado</code>, <code>confirmacao</code> ou <code>checkin</code>. O sistema casa a pessoa por e-mail ou telefone.</p>
           <div class="copiar" style="margin-bottom:12px"><input class="input" readonly value="${esc(c.webhook_dados || '')}" id="wd-url"><button class="btn navy" data-act="copiar-dados">Copiar</button></div>
+          <div class="secao">Diagnóstico: planilha de respostas</div>
+          <p class="small muted" style="margin-top:-4px">O sistema lê essa planilha sozinho a cada 15 minutos e preenche o diagnóstico de <b>quem já é lead aqui</b> (casando por e-mail ou telefone). Quem respondeu e não comprou é ignorado.</p>
+          <div class="row">
+            <div class="field"><label>ID da planilha</label><input class="input" id="cfg-diag-id" value="${esc(c.diag_planilha_id || '')}" placeholder="1XZ1PF..."></div>
+            <div class="field" style="max-width:180px"><label>Aba</label><input class="input" id="cfg-diag-aba" value="${esc(c.diag_aba || '')}" placeholder="Diagnosticos"></div>
+          </div>
+          <p class="small muted">Última leitura: <b>${c.diag_ultima_sinc ? fmtData(c.diag_ultima_sinc) : 'nunca'}</b></p>
+          <div class="row" style="flex-wrap:wrap;margin-bottom:14px">
+            <button class="btn line sm" data-act="salvar-config" data-loading=" Salvando...">Salvar planilha</button>
+            <button class="btn navy sm" data-act="sincronizar-diag" data-loading=" Lendo...">${I.refresh}Ler respostas agora</button>
+          </div>
+          <div id="diag-res"></div>
+
           <div class="secao">Importar por planilha</div>
           <div class="row" style="flex-wrap:wrap">
-            <button class="btn line sm" data-act="imp-checkin">${I.upload}Check-in do evento</button>
-            <button class="btn line sm" data-act="imp-confirmacao">${I.upload}Confirmações</button>
+            ${(c.marcos_ativos || []).indexOf('checkin') >= 0 ? `<button class="btn line sm" data-act="imp-checkin">${I.upload}Check-in do evento</button>` : ''}
+            ${(c.marcos_ativos || []).indexOf('confirmado') >= 0 ? `<button class="btn line sm" data-act="imp-confirmacao">${I.upload}Confirmações</button>` : ''}
             <button class="btn line sm" data-act="imp-diagnostico">${I.upload}Diagnóstico</button>
             <button class="btn line sm" data-act="imp-obrigado">${I.upload}Página de obrigado</button>
           </div>
@@ -2152,6 +2209,23 @@
         break;
       }
       case 'del-produto-hot': el.closest('.prod-linha').remove(); break;
+      case 'sincronizar-diag':
+        comBotao(el, async () => {
+          const r = await api('admin.diagnostico.sincronizar');
+          if (r.erro) {
+            const erroBox = document.getElementById('diag-res');
+            if (erroBox) erroBox.innerHTML = `<div class="cliente-box" style="background:var(--vermelho-2)"><b>Não deu certo</b>${esc(r.erro)}</div>`;
+            return;
+          }
+          await carregar();
+          const box = document.getElementById('diag-res');
+          if (box) box.innerHTML = `<div class="cliente-box mdl"><b>Aba ${esc(r.aba || '')}</b>
+            ${r.pessoas || 0} pessoas responderam · <b style="display:inline;text-transform:none;font-size:14px">${r.atualizados || 0} leads preenchidos</b>
+            ${r.ja_estavam ? ` · ${r.ja_estavam} já estavam em dia` : ''} · ${r.sem_lead || 0} não são leads daqui
+            ${(r.exemplos_sem_lead || []).length ? `<div class="small" style="margin-top:6px">Fora da base: ${esc(r.exemplos_sem_lead.join(', '))}</div>` : ''}</div>`;
+          toast(`${r.atualizados || 0} leads com diagnóstico`, 'ok');
+        });
+        break;
       case 'imp-checkin': abrirImportarMarcos('checkin'); break;
       case 'imp-confirmacao': abrirImportarMarcos('confirmacao'); break;
       case 'imp-diagnostico': abrirImportarMarcos('diagnostico'); break;
@@ -2169,10 +2243,17 @@
             el.querySelector('[data-p="tipo"]').value
           ]).filter((x) => x[0]).map((x) => x.join(';')).join('\n');
           S.config = await api('admin.config', { config: { HOTMART_PRODUTOS: prods, BASE_CLIENTES_ID: document.getElementById('cfg-base').value, HOTMART_MODO_TESTE: document.getElementById('cfg-teste').checked ? 'SIM' : 'NAO',
-            UPGRADE_VIP_URL: document.getElementById('cfg-upg').value.trim(), UPGRADE_VIP_VALOR: document.getElementById('cfg-upg-val').value.trim(),
+            NOME_SISTEMA: (document.getElementById('cfg-nome') || {}).value || undefined,
+            QUEM_GERENCIA: (document.getElementById('cfg-gerencia') || {}).value || undefined,
+            MARCOS_ATIVOS: [...document.querySelectorAll('[data-marco]')].filter((x) => x.checked).map((x) => x.dataset.marco).join(','),
+            UPGRADE_VIP_URL: (document.getElementById('cfg-upg') || {}).value || undefined, UPGRADE_VIP_VALOR: (document.getElementById('cfg-upg-val') || {}).value || undefined,
             DIAGNOSTICO_URL: document.getElementById('cfg-diag').value.trim(), EVENTO_DATA: document.getElementById('cfg-evento').value,
+            DIAG_PLANILHA_ID: (document.getElementById('cfg-diag-id') || {}).value || undefined,
+            DIAG_ABA: (document.getElementById('cfg-diag-aba') || {}).value || undefined,
             DISTRIBUICAO_AUTO: document.getElementById('cfg-dist').checked ? 'SIM' : 'NAO' } });
           S.links = { upgrade: S.config.upgrade_url, upgrade_valor: S.config.upgrade_valor, diagnostico: S.config.diagnostico_url, evento: S.config.evento_data };
+          S.marcosAtivos = S.config.marcos_ativos || S.marcosAtivos;
+          if (S.config.nome_sistema) { S.nomeSistema = S.config.nome_sistema; document.title = S.nomeSistema; }
           toast('Configurações salvas', 'ok');
           renderMain();
         });

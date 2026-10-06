@@ -198,6 +198,7 @@ main { padding: 14px 16px calc(var(--nav-h) + 24px + var(--safe-b)); max-width: 
 .tag {
   display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700;
   padding: 3px 8px; border-radius: 6px; background: var(--fundo); color: var(--texto-2); white-space: nowrap;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis;
 }
 .tag.vip { background: var(--amarelo); color: var(--navy); }
 .tag.padrao { background: var(--azul-2); color: var(--azul); }
@@ -404,3 +405,8 @@ code { background: var(--fundo); padding: 1px 5px; border-radius: 5px; font-size
   .prod-linha [data-p="nome"] { grid-column: 1 / -1; order: -1; }
 }
 .tag.origem { background: #E7EEF6; color: #1C4E80; }
+
+.marcos-cfg { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 6px 12px; margin-bottom: 14px; }
+.nav.n6 button { font-size: 9.5px; }
+.nav.n6 button svg { width: 20px; height: 20px; }
+@media (min-width: 900px) { .nav.n6 button { font-size: 14px; } .nav.n6 button svg { width: 22px; height: 22px; } }
