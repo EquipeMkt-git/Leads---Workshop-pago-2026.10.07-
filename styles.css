@@ -190,6 +190,16 @@ main { padding: 14px 16px calc(var(--nav-h) + 24px + var(--safe-b)); max-width: 
 .card { background: var(--card); border-radius: var(--raio); box-shadow: var(--sombra); }
 .lead { padding: 14px; display: flex; flex-direction: column; gap: 10px; border-left: 4px solid transparent; }
 .lead.vip { border-left-color: var(--amarelo); }
+/* levantada de mão para o MDL: card destacado */
+.lead.interessado {
+  border-left-color: #E0531F;
+  background: linear-gradient(90deg, #FFF3EC 0%, var(--card) 62%);
+  box-shadow: 0 0 0 1.5px #F7C3AC inset, var(--sombra);
+}
+.lead.interessado .lead-main h3::after {
+  content: 'MDL'; margin-left: 7px; font-size: 10px; font-weight: 800; letter-spacing: .4px;
+  background: #E0531F; color: #fff; padding: 2px 5px; border-radius: 5px; vertical-align: 1px;
+}
 .lead-top { display: flex; gap: 11px; align-items: flex-start; cursor: pointer; }
 .lead-main { flex: 1; min-width: 0; }
 .lead-main h3 { font-size: 15.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -208,6 +218,7 @@ main { padding: 14px 16px calc(var(--nav-h) + 24px + var(--safe-b)); max-width: 
 .tag.evento { background: #FFF1E0; color: #A35A00; }
 .tag.alerta { background: var(--vermelho-2); color: var(--vermelho); }
 .tag.ok { background: var(--verde-2); color: #0B7A3B; }
+.tag.interesse { background: #E0531F; color: #fff; }
 .tag svg { width: 12px; height: 12px; }
 .lead-actions { display: flex; gap: 8px; }
 .lead-actions .btn { flex: 1; }

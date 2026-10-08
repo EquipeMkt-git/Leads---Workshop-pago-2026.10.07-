@@ -99,6 +99,7 @@
   const vendasDoLead = (id) => S.vendas.filter((v) => v.lead_id === id);
   const faseDe = (l) => S.fases.find((f) => f.id === l.fase_id) || null;
   const usaVip = () => S.modoSistema !== 'perpetuo';
+  const usaInteresse = () => marcosDoSistema().indexOf('interesse') >= 0;
   function indiceDiag(l) {
     if (!l.diagnostico_respostas) return '';
     try {
@@ -113,6 +114,7 @@
     acesso: { rot: 'Acesso ao produto', vals: { sim: ['Acessou o produto', 'ok'], nao: ['Ainda não acessou', 'alerta'] } },
     confirmado: { rot: 'Presença', ic: 'check', vals: { sim: ['Confirmou presença', 'ok'], nao: ['Não vai participar', 'alerta'] } },
     upgrade: { rot: 'Upgrade VIP', ic: 'estrela', vals: { enviado: ['Upgrade enviado', 'evento'], feito: ['Fez upgrade VIP', 'vip'], nao_quer: ['Recusou o upgrade', ''] } },
+    interesse: { rot: 'Interesse no MDL', ic: 'estrela', vals: { sim: ['Interessado - MDL', 'interesse'], nao: ['Sem interesse no MDL', ''] } },
     diagnostico: { rot: 'Diagnóstico', ic: 'leads', vals: { enviado: ['Diagnóstico enviado', 'evento'], feito: ['Diagnóstico feito', 'ok'] } },
     reuniao: { rot: 'Reunião', ic: 'chat', vals: { agendada: ['Reunião agendada', 'evento'], feita: ['Reunião feita', 'ok'], nao_compareceu: ['Faltou na reunião', 'alerta'] } },
     checkin: { rot: 'Participou', ic: 'trofeu', vals: { sim: ['Participou do Workshop', 'ok'], nao: ['Não participou', 'alerta'] } }
@@ -381,6 +383,7 @@
     return lista.filter((l) => norm(l.nome).includes(q) || norm(l.email).includes(q) || norm(l.cidade).includes(q) || (qd.length >= 4 && soDig(l.telefone).includes(qd)));
   }
   function aplicaFiltroChip(lista, f) {
+    if (f === 'interesse') return lista.filter((l) => l.interesse === 'sim');
     if (f === 'vip') return lista.filter((l) => l.tipo_ingresso === 'vip');
     if (f === 'padrao') return lista.filter((l) => l.tipo_ingresso !== 'vip');
     if (f === 'clientes') return lista.filter(ehCliente);
@@ -408,7 +411,8 @@
         <div><b class="num">${brlCurto(minhasVendas.reduce((s, v) => s + num(v.valor_total), 0))}</b><span>Vendido</span></div>
       </div>`;
 
-    const chipsDef = [['todos', 'Todos']].concat(usaVip() ? [['vip', 'VIP'], ['padrao', 'Padrão']] : [])
+    const chipsDef = [['todos', 'Todos']].concat(usaInteresse() ? [['interesse', 'Interessados - MDL']] : [])
+      .concat(usaVip() ? [['vip', 'VIP'], ['padrao', 'Padrão']] : [])
       .concat([['clientes', 'Clientes'], ['eventos', 'Já foi a eventos']]);
     if (st === 'tratativa') chipsDef.push(['parados', 'Parados +48h']);
     const chips = chipsDef.map(([k, r]) => `<button class="chip ${S.filtro === k ? 'on' : ''}" data-chip="${k}">${r}<span class="n">${aplicaFiltroChip(aplicaBusca(base), k).length}</span></button>`).join('');
@@ -440,7 +444,7 @@
           <button class="btn sm amarelo" data-act="novo-lead">${I.mais}Lead</button>
         </div></div>
       <div class="busca">${I.busca}<input class="input" data-busca placeholder="Buscar nome, telefone, e-mail, cidade" value="${esc(S.busca)}"></div>
-      <div class="chips">${[['todos', 'Todos']].concat(usaVip() ? [['vip', 'VIP'], ['padrao', 'Padrão']] : []).concat([['clientes', 'Clientes'], ['parados', 'Parados +48h']])
+      <div class="chips">${[['todos', 'Todos']].concat(usaInteresse() ? [['interesse', 'Interessados - MDL']] : []).concat(usaVip() ? [['vip', 'VIP'], ['padrao', 'Padrão']] : []).concat([['clientes', 'Clientes'], ['parados', 'Parados +48h']])
         .map(([k, r]) => `<button class="chip ${S.filtro === k ? 'on' : ''}" data-chip="${k}">${r}<span class="n">${aplicaFiltroChip(aplicaBusca(base), k).length}</span></button>`).join('')}</div>`;
     if (!lista.length) return cabecalho + vazio('tratativa');
     if (S.funilLista) {
@@ -518,7 +522,7 @@
       : l.status === 'tratativa' ? 'Última ação ' + rel(l.ultima_acao || l.inicio_tratativa)
         : fmtData(l.fechado_em || l.atualizado_em);
     return `
-      <article class="card lead ${l.tipo_ingresso === 'vip' ? 'vip' : ''}">
+      <article class="card lead ${l.tipo_ingresso === 'vip' ? 'vip' : ''} ${l.interesse === 'sim' ? 'interessado' : ''}">
         <div class="lead-top" data-act="abrir" data-id="${l.id}">
           <div class="avatar" style="background:${corDe(l.nome)}">${esc(iniciais(l.nome))}</div>
           <div class="lead-main"><h3>${esc(l.nome || '(sem nome)')}</h3><div class="meta">${esc(meta || l.email || '')}</div>
@@ -1222,6 +1226,7 @@
               acesso: [['Acessaram o produto', 'sim', '#0B7A9E']],
               confirmado: [['Confirmaram presença', 'sim', '#F8B90C']],
               upgrade: [['Fizeram upgrade VIP', 'feito', '#7A4CC2'], ['Link do upgrade enviado', 'enviado', '#B39DDB']],
+              interesse: [['Levantaram a mão para o MDL', 'sim', '#E0531F']],
               diagnostico: [['Diagnóstico respondido', 'feito', '#0B7A9E']],
               reuniao: [['Reunião realizada', 'feita', '#C2410C']],
               checkin: [['Participaram do evento', 'sim', '#12A150']]
@@ -1305,7 +1310,8 @@
   function leadsFiltradosAdmin() {
     const A = S.adm;
     let ls = aplicaBusca(S.leads);
-    if (A.status !== 'todos') ls = ls.filter((l) => l.status === A.status);
+    if (A.status === 'interesse') ls = ls.filter((l) => l.interesse === 'sim');
+    else if (A.status !== 'todos') ls = ls.filter((l) => l.status === A.status);
     if (A.resp !== 'todos') ls = ls.filter((l) => (A.resp === '__sem' ? !l.responsavel_id : l.responsavel_id === A.resp));
     if (A.tipo !== 'todos') ls = ls.filter((l) => (l.tipo_ingresso === 'vip' ? 'vip' : 'padrao') === A.tipo);
     if (A.origem !== 'todos') ls = ls.filter((l) => (l.origem_evento || '(sem origem)') === A.origem);
@@ -1321,7 +1327,8 @@
     const A = S.adm;
     const ls = leadsFiltradosAdmin();
     const base = aplicaBusca(S.leads);
-    const chips = [['todos', 'Todos', base.length]].concat(Object.keys(STATUS_INFO).map((k) => [k, STATUS_INFO[k].sing, base.filter((l) => l.status === k).length]))
+    const chips = [['todos', 'Todos', base.length]].concat(usaInteresse() ? [['interesse', 'Interessados - MDL', base.filter((l) => l.interesse === 'sim').length]] : [])
+      .concat(Object.keys(STATUS_INFO).map((k) => [k, STATUS_INFO[k].sing, base.filter((l) => l.status === k).length]))
       .map(([k, r, n]) => `<button class="chip ${A.status === k ? 'on' : ''}" data-adm-status="${k}">${r}<span class="n">${n}</span></button>`).join('');
     const opsResp = S.usuarios.map((u) => `<option value="${u.id}" ${A.resp === u.id ? 'selected' : ''}>${esc(u.nome)}</option>`).join('');
     const sel = (k, v, r) => `<option value="${v}" ${A[k] === v ? 'selected' : ''}>${r}</option>`;
@@ -1691,8 +1698,14 @@
           </div>
           <div id="diag-res"></div>
 
+          ${(c.marcos_ativos || []).indexOf('interesse') >= 0 ? `
+          <div class="secao">Lista de interesse no MDL (levantada de mão)</div>
+          <p class="small muted" style="margin-top:-4px">Ligue esta URL na automação do ActiveCampaign que marca a tag <b>${esc(c.ac_tag_interesse || '')}</b>. Quem levantar a mão recebe a tag <b>Interessado - MDL</b>, fica com o card destacado e é dividido na hora entre as concierges cadastradas — mesmo quem ainda não estava no sistema entra como lead novo.</p>
+          <div class="copiar" style="margin-bottom:14px"><input class="input" readonly value="${esc(c.webhook_interesse || '')}" id="wi-url"><button class="btn navy" data-act="copiar-interesse">Copiar</button></div>` : ''}
+
           <div class="secao">Importar por planilha</div>
           <div class="row" style="flex-wrap:wrap">
+            ${(c.marcos_ativos || []).indexOf('interesse') >= 0 ? `<button class="btn line sm" data-act="imp-interesse">${I.upload}Lista de interesse (MDL)</button>` : ''}
             ${(c.marcos_ativos || []).indexOf('checkin') >= 0 ? `<button class="btn line sm" data-act="imp-checkin">${I.upload}Check-in do evento</button>` : ''}
             ${(c.marcos_ativos || []).indexOf('confirmado') >= 0 ? `<button class="btn line sm" data-act="imp-confirmacao">${I.upload}Confirmações</button>` : ''}
             <button class="btn line sm" data-act="imp-diagnostico">${I.upload}Diagnóstico</button>
@@ -1979,6 +1992,7 @@
 
   /* ---------------- importação de check-in / confirmações / diagnóstico / dados */
   const IMP_MARCOS = {
+    interesse: ['Lista de interesse no MDL', 'Lista de quem levantou a mão para conhecer o MDL (exportação do ActiveCampaign, por exemplo). Quem já é lead recebe a tag <b>Interessado - MDL</b>; quem não está no sistema entra como lead novo. Todos são divididos entre as concierges na hora.'],
     checkin: ['Check-in do evento', 'Lista de quem passou no credenciamento. Marca "Participou do Workshop" em cada lead encontrado.'],
     confirmacao: ['Confirmações de presença', 'Lista de quem confirmou presença. Marca "Confirmou presença".'],
     diagnostico: ['Respostas do diagnóstico', 'Planilha de respostas do formulário. Marca o diagnóstico como feito e guarda as respostas no card do lead.'],
@@ -2001,7 +2015,7 @@
       onMount: (sh) => {
         const $map = sh.querySelector('#mi-map'), prev = sh.querySelector('#mi-prev');
         const ok = sh.querySelector('#mi-ok'), sim = sh.querySelector('#mi-sim');
-        const campos = [['email', 'E-mail'], ['telefone', 'Telefone'], ['nome', 'Nome (só para conferir)']];
+        const campos = [['email', 'E-mail'], ['telefone', 'Telefone'], ['nome', tipo === 'interesse' ? 'Nome' : 'Nome (só para conferir)']];
         const pintar = () => {
           const ops = (sel) => '<option value="-1">— não usar —</option>' + cab.map((c, i) => `<option value="${i}" ${sel === i ? 'selected' : ''}>${esc(c || '(coluna ' + (i + 1) + ')')}</option>`).join('');
           $map.innerHTML = `<div class="secao" style="margin-top:4px">Confira as colunas</div>
@@ -2049,6 +2063,18 @@
         const enviar = (simular) => async () => {
           const r = await api('admin.importar.marcos', { tipo, linhas, simular });
           const box = sh.querySelector('#mi-res');
+          if (tipo === 'interesse') {
+            const porU = Object.entries(r.por_usuario || {}).map(([n, q]) => `${n} (${q})`).join(', ');
+            const txt2 = `${r.marcados} leads já no sistema · ${r.criados} leads novos criados${r.ja_tinham ? ` · ${r.ja_tinham} já estavam na lista` : ''}`;
+            if (simular) {
+              box.innerHTML = `<div class="cliente-box exmdl" style="margin-top:10px"><b>Simulação (nada foi gravado)</b>${txt2}</div>`;
+              return;
+            }
+            fecharSheet();
+            toast(`${r.marcados + r.criados} interessados no MDL${porU ? ' · ' + porU : ''}`, 'ok');
+            await carregar();
+            return;
+          }
           const txt = `${r.encontrados} leads encontrados · ${r.nao_encontrados} não estão no sistema`;
           if (simular) {
             box.innerHTML = `<div class="cliente-box exmdl" style="margin-top:10px"><b>Simulação (nada foi gravado)</b>${txt}
@@ -2202,6 +2228,7 @@
       case 'editar-mensagem': abrirFormMensagem(id); break;
       case 'sair': api('logout').catch(() => {}); sairLocal(); break;
       case 'copiar-dados': copiarTexto(document.getElementById('wd-url').value); break;
+      case 'copiar-interesse': copiarTexto(document.getElementById('wi-url').value); break;
       case 'add-produto-hot': {
         const box = document.getElementById('cfg-produtos');
         box.insertAdjacentHTML('beforeend', linhaProduto({ id: '', nome: '', tipo: 'padrao' }));
@@ -2226,6 +2253,7 @@
           toast(`${r.atualizados || 0} leads com diagnóstico`, 'ok');
         });
         break;
+      case 'imp-interesse': abrirImportarMarcos('interesse'); break;
       case 'imp-checkin': abrirImportarMarcos('checkin'); break;
       case 'imp-confirmacao': abrirImportarMarcos('confirmacao'); break;
       case 'imp-diagnostico': abrirImportarMarcos('diagnostico'); break;

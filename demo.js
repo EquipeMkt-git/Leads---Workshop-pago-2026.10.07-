@@ -64,12 +64,14 @@
       nome: n, email, telefone: '55' + pick(['11', '41', '62', '21', '85', '19']) + '9' + String(10000000 + Math.floor(r() * 89999999)),
       cidade: pick(cidades), empresa: '', obs: '', status: 'novo', responsavel_id: '', responsavel_nome: '', inicio_tratativa: '', ultima_acao: '',
       fechado_em: '', motivo: '', mensagem_usada: '', transacao: 'HP' + (1700000000 + i * 7919), produto_hotmart: vip ? '8502486' : '8502151',
-      origem_evento: PERP ? 'Curso Pró-labore e Distribuição de Lucros (PLR)' : (i % 4 === 3 ? 'Workshop Online de Gestão de Pessoas' : (vip ? 'Workshop presencial 07/10 — VIP' : 'Workshop presencial 07/10 — Padrão')),
+      origem_evento: PERP ? 'Curso Pró-labore e Distribuição de Lucros (PLR)' : (i % 4 === 3 ? 'Workshop Online de Gestão de Pessoas' : (vip ? 'Workshop Pago - 08/10 — VIP' : 'Workshop Pago - 08/10 — Padrão')),
       valor_ingresso: vip ? '997' : '197', status_hotmart: 'APPROVED', cliente_mdl: '', cliente_ilu: '', eventos: '', cargo: pick(['Dono / Sócio', 'Dono / Sócio', 'Diretor', 'Gerente']),
       faturamento: pick(fats), criado_por: i % 9 === 0 ? 'Ana Ribeiro' : 'Hotmart', atualizado_em: '',
       fase_id: '', fase_em: '', confirmado: '', confirmado_em: '', upgrade: '', upgrade_em: '', diagnostico: '', diagnostico_em: '',
-      diagnostico_respostas: '', reuniao: '', reuniao_em: '', reuniao_obs: '', checkin: '', checkin_em: '', dados_extra: ''
+      diagnostico_respostas: '', reuniao: '', reuniao_em: '', reuniao_obs: '', checkin: '', checkin_em: '', dados_extra: '',
+      interesse: '', interesse_em: ''
     };
+    if (!PERP && i % 5 === 2) { l.interesse = 'sim'; l.interesse_em = atras(1 + r() * 3); }
     if (r() < 0.22) l.cliente_mdl = pick(['Mamber Ativo · Máquina de Lucros Essencial', 'Ex Mamber · Máquina de Lucros PRO', 'Mentoria Cancelada · Máquina de Lucros Essencial']);
     if (r() < 0.2) l.cliente_ilu = 'Ex iluminista';
     if (r() < 0.45) {
@@ -156,15 +158,17 @@
   const config = {
     nome_sistema: PERP ? 'Leads - Perpétuo' : 'Leads - Workshop pago [2026.10.07]',
     modo: PERP ? 'perpetuo' : 'evento',
-    marcos_ativos: PERP ? ['boas_vindas', 'acesso', 'reuniao'] : ['confirmado', 'upgrade', 'diagnostico', 'reuniao', 'checkin'],
+    marcos_ativos: PERP ? ['boas_vindas', 'acesso', 'reuniao'] : ['confirmado', 'upgrade', 'interesse', 'diagnostico', 'reuniao', 'checkin'],
     quem_gerencia: PERP ? 'todos' : 'coordenador',
     produtos: PERP ? [{ id: '6790181', nome: 'Curso Pró-labore e Distribuição de Lucros (PLR)', tipo: 'padrao' }] : [
-      { id: '8502151', nome: 'Workshop presencial 07/10 — Padrão', tipo: 'padrao' },
-      { id: '8502486', nome: 'Workshop presencial 07/10 — VIP', tipo: 'vip' },
+      { id: '8502151', nome: 'Workshop Pago - 08/10 — Padrão', tipo: 'padrao' },
+      { id: '8502486', nome: 'Workshop Pago - 08/10 — VIP', tipo: 'vip' },
       { id: '4195296', nome: 'Workshop Online de Gestão de Pessoas', tipo: 'padrao' }
     ],
     upgrade_url: 'https://pay.hotmart.com/exemplo-upgrade-vip', upgrade_valor: '50', diagnostico_url: 'https://forms.exemplo.com/diagnostico', evento_data: '2026-10-07', distribuicao_auto: false,
     webhook_dados: 'https://script.google.com/macros/s/SEU_ID/exec?src=dados&key=CHAVE&tipo=diagnostico',
+    webhook_interesse: 'https://script.google.com/macros/s/SEU_ID/exec?src=dados&key=CHAVE&tipo=interesse',
+    ac_tag_interesse: 'lista de interesse mdl [2026.10.07] Workshop Online (MDL)',
     webhook: 'https://script.google.com/macros/s/SEU_ID/exec?src=hotmart&key=CHAVE', id_padrao: '8502151', id_vip: '8502486', base_id: '1ihgdFxaR5cM6xyAECvJ-IORN1dmghRin9gmRFCsHe5I', ultima_sincronizacao: atras(0.4), diag_planilha_id: '1XZ1PFVywi1fCAkkTFsjlFtLZPgP-UwSMIpIrsvfmRqY', diag_aba: 'Diagnosticos', diag_ultima_sinc: atras(0.2), modo_teste: false, hotmart_api: { configurada: false, client_id: '' },
     webhooks: [{ recebido_em: atras(0.2), evento: 'PURCHASE_APPROVED', produto: '8502486', transacao: 'HP1700102947', email: 'felipe.cardoso@exemplo.com', status: 'ok', resultado: 'Lead criado: L113' },
       { recebido_em: atras(1), evento: 'PURCHASE_CHARGEBACK', produto: '0', transacao: 'HP16015479281022', email: 'teste@example.com', status: 'ignorado', resultado: 'produto de teste da Hotmart (id 0) — ative o modo teste para aceitar' }] };
@@ -277,6 +281,49 @@
       return { simulacao: !!b.simular, distribuidos: sem.length, por_usuario: porUsuario, concierges: cs.length };
     },
     'admin.importar.marcos': (b, u) => {
+      if (b.tipo === 'interesse') {
+        const cs = U.filter((x) => x.ativo === 'SIM' && (x.perfil !== 'coordenador' || x.recebe_leads === 'SIM'));
+        const abertos = {};
+        cs.forEach((x) => { abertos[x.id] = L.filter((l) => l.responsavel_id === x.id && (l.status === 'novo' || l.status === 'tratativa')).length; });
+        const proximo = () => {
+          if (!cs.length) return null;
+          let m = cs[0]; cs.forEach((x) => { if (abertos[x.id] < abertos[m.id]) m = x; });
+          abertos[m.id]++; return m;
+        };
+        let marcados = 0, criados = 0, ja = 0;
+        const porU = {};
+        b.linhas.forEach((r) => {
+          const em = String(r.email || '').toLowerCase();
+          const tk = String(r.telefone || '').replace(/\D/g, '').slice(-8);
+          if (!em && !tk) return;
+          const l = L.find((x) => (em && x.email === em) || (tk && x.telefone && x.telefone.slice(-8) === tk));
+          if (l) {
+            if (l.interesse === 'sim') { ja++; return; }
+            marcados++;
+            if (b.simular) return;
+            l.interesse = 'sim'; l.interesse_em = agora(); l.atualizado_em = agora(); l.ultima_acao = agora();
+            if (!l.responsavel_id) { const x = proximo(); if (x) { l.responsavel_id = x.id; l.responsavel_nome = x.nome; porU[x.nome] = (porU[x.nome] || 0) + 1; } }
+            if (!l.fase_id) { l.fase_id = (F[0] || {}).id || ''; l.fase_em = agora(); }
+            hist(l.id, u, 'marco', 'Levantou a mão para o MDL');
+            return;
+          }
+          criados++;
+          if (b.simular) return;
+          const novo = Object.assign({}, L[0], {
+            id: 'L' + (900 + criados), nome: r.nome || em.split('@')[0] || r.telefone, email: em, telefone: String(r.telefone || ''),
+            origem: 'interesse', origem_evento: 'Lista de interesse — MDL', status: 'novo', criado_em: agora(), criado_por: 'ActiveCampaign',
+            transacao: '', produto_hotmart: '', valor_ingresso: '', tipo_ingresso: 'padrao', cliente_mdl: '', cliente_ilu: '', eventos: '',
+            confirmado: '', confirmado_em: '', upgrade: '', upgrade_em: '', diagnostico: '', diagnostico_em: '', diagnostico_respostas: '',
+            reuniao: '', reuniao_em: '', checkin: '', checkin_em: '', responsavel_id: '', responsavel_nome: '',
+            interesse: 'sim', interesse_em: agora(), fase_id: (F[0] || {}).id || '', fase_em: agora()
+          });
+          const x = proximo();
+          if (x) { novo.responsavel_id = x.id; novo.responsavel_nome = x.nome; porU[x.nome] = (porU[x.nome] || 0) + 1; }
+          L.push(novo);
+          hist(novo.id, u, 'criado', 'Entrou pela lista de interesse no MDL');
+        });
+        return { ok: true, simulacao: !!b.simular, tipo: 'interesse', linhas: b.linhas.length, marcados, criados, ja_tinham: ja, por_usuario: porU, concierges: cs.length };
+      }
       let ach = 0, nao = 0, atu = 0;
       const faltam = [];
       b.linhas.forEach((r) => {
