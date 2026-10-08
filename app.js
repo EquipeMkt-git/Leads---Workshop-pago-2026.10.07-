@@ -398,11 +398,15 @@
     const uid = S.user.id;
     const meus = S.leads.filter((l) => l.responsavel_id === uid);
     const base = S.leads.filter((l) => l.status === st && (st === 'novo' || l.responsavel_id === uid));
+    // A lista de interesse é transversal: na aba de contatos ela mostra TODOS os
+    // interessados da concierge, mesmo os que já estão em tratativa, ganhos ou perdidos.
+    const baseInteresse = S.leads.filter((l) => l.interesse === 'sim' && (l.responsavel_id === uid || !l.responsavel_id));
+    const baseDe = (f) => (f === 'interesse' && st === 'novo' ? baseInteresse : base);
     const ord = {
       novo: (a, b) => String(b.criado_em).localeCompare(String(a.criado_em)),
       tratativa: (a, b) => String(a.ultima_acao || a.inicio_tratativa).localeCompare(String(b.ultima_acao || b.inicio_tratativa)),
     }[st] || ((a, b) => String(b.fechado_em || b.atualizado_em).localeCompare(String(a.fechado_em || a.atualizado_em)));
-    let lista = aplicaFiltroChip(aplicaBusca(base), S.filtro).sort(ord);
+    let lista = aplicaFiltroChip(aplicaBusca(baseDe(S.filtro)), S.filtro).sort(ord);
 
     const minhasVendas = S.vendas.filter((v) => v.usuario_id === uid && v.status === 'ativa');
     const resumo = `
@@ -412,13 +416,15 @@
         <div><b class="num">${brlCurto(minhasVendas.reduce((s, v) => s + num(v.valor_total), 0))}</b><span>Vendido</span></div>
       </div>`;
 
-    const chipsDef = [['todos', 'Todos']].concat(usaInteresse() ? [['interesse', 'Interessados - MDL']] : [])
+    const chipsDef = [['todos', 'Todos']].concat(usaInteresse() && st === 'novo' ? [['interesse', 'Interessados - MDL']] : [])
       .concat(usaVip() ? [['vip', 'VIP'], ['padrao', 'Padrão']] : [])
       .concat([['clientes', 'Clientes'], ['eventos', 'Já foi a eventos']]);
     if (st === 'tratativa') chipsDef.push(['parados', 'Parados +48h']);
-    const chips = chipsDef.map(([k, r]) => `<button class="chip ${S.filtro === k ? 'on' : ''}" data-chip="${k}">${r}<span class="n">${aplicaFiltroChip(aplicaBusca(base), k).length}</span></button>`).join('');
+    const chips = chipsDef.map(([k, r]) => `<button class="chip ${S.filtro === k ? 'on' : ''}" data-chip="${k}">${r}<span class="n">${aplicaFiltroChip(aplicaBusca(baseDe(k)), k).length}</span></button>`).join('');
 
     const titulos = { novo: 'Lista de contatos', tratativa: 'Minhas tratativas', ganho: 'Negócio ganho', perdido: 'Negócio perdido', reembolso: 'Reembolsos' };
+    const aviso = S.filtro === 'interesse' && st === 'novo'
+      ? '<p class="hint" style="margin:-4px 0 10px">Mostrando <b>todos</b> os seus interessados no MDL, em qualquer etapa — por isso alguns já aparecem como em tratativa ou fechados.</p>' : '';
     const visiveis = lista.slice(0, S.limite);
     return `
       ${resumo}
@@ -426,6 +432,7 @@
         <div class="acoes"><button class="btn sm amarelo" data-act="novo-lead">${I.mais}Lead</button></div></div>
       <div class="busca">${I.busca}<input class="input" data-busca placeholder="Buscar nome, telefone, e-mail, cidade" value="${esc(S.busca)}" enterkeyhint="search"></div>
       <div class="chips">${chips}</div>
+      ${aviso}
       ${lista.length ? `<div class="lista">${visiveis.map(cardLead).join('')}</div>
         ${lista.length > S.limite ? `<div class="mais"><button class="btn line" data-act="mais">Mostrar mais (${lista.length - S.limite})</button></div>` : ''}`
         : vazio(st)}`;
@@ -528,7 +535,7 @@
           <div class="avatar" style="background:${corDe(l.nome)}">${esc(iniciais(l.nome))}</div>
           <div class="lead-main"><h3>${esc(l.nome || '(sem nome)')}</h3><div class="meta">${esc(meta || l.email || '')}</div>
           <div class="meta">${esc(quando)}${S.modo === 'coord' && l.responsavel_nome ? ' · ' + esc(l.responsavel_nome) : ''}</div></div>
-          ${S.modo === 'coord' ? `<span class="status-pill st-${l.status}">${STATUS_INFO[l.status] ? STATUS_INFO[l.status].sing : esc(l.status)}</span>` : ''}
+          ${S.modo === 'coord' || (S.filtro === 'interesse' && S.view === 'novo') ? `<span class="status-pill st-${l.status}">${STATUS_INFO[l.status] ? STATUS_INFO[l.status].sing : esc(l.status)}</span>` : ''}
         </div>
         <div class="tags">${tagsLead(l)}</div>
         ${rodape}
