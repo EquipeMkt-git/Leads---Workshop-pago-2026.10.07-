@@ -69,8 +69,9 @@
       faturamento: pick(fats), criado_por: i % 9 === 0 ? 'Ana Ribeiro' : 'Hotmart', atualizado_em: '',
       fase_id: '', fase_em: '', confirmado: '', confirmado_em: '', upgrade: '', upgrade_em: '', diagnostico: '', diagnostico_em: '',
       diagnostico_respostas: '', reuniao: '', reuniao_em: '', reuniao_obs: '', checkin: '', checkin_em: '', dados_extra: '',
-      interesse: '', interesse_em: ''
+      interesse: '', interesse_em: '', presentes: '', presentes_em: ''
     };
+    if (!PERP && i % 3 === 0) { l.presentes = 'sim'; l.presentes_em = atras(1 + r() * 2); }
     if (!PERP && i % 5 === 2) { l.interesse = 'sim'; l.interesse_em = atras(1 + r() * 3); }
     if (r() < 0.22) l.cliente_mdl = pick(['Mamber Ativo · Máquina de Lucros Essencial', 'Ex Mamber · Máquina de Lucros PRO', 'Mentoria Cancelada · Máquina de Lucros Essencial']);
     if (r() < 0.2) l.cliente_ilu = 'Ex iluminista';
@@ -158,7 +159,7 @@
   const config = {
     nome_sistema: PERP ? 'Leads - Perpétuo' : 'Leads - Workshop pago [2026.10.07]',
     modo: PERP ? 'perpetuo' : 'evento',
-    marcos_ativos: PERP ? ['boas_vindas', 'acesso', 'reuniao'] : ['confirmado', 'upgrade', 'interesse', 'diagnostico', 'reuniao', 'checkin'],
+    marcos_ativos: PERP ? ['boas_vindas', 'acesso', 'reuniao'] : ['confirmado', 'upgrade', 'interesse', 'diagnostico', 'reuniao', 'checkin', 'presentes'],
     quem_gerencia: PERP ? 'todos' : 'coordenador',
     produtos: PERP ? [{ id: '6790181', nome: 'Curso Pró-labore e Distribuição de Lucros (PLR)', tipo: 'padrao' }] : [
       { id: '8502151', nome: 'Workshop Pago - 08/10 — Padrão', tipo: 'padrao' },
@@ -168,6 +169,17 @@
     upgrade_url: 'https://pay.hotmart.com/exemplo-upgrade-vip', upgrade_valor: '50', diagnostico_url: 'https://forms.exemplo.com/diagnostico', evento_data: '2026-10-07', distribuicao_auto: false,
     webhook_dados: 'https://script.google.com/macros/s/SEU_ID/exec?src=dados&key=CHAVE&tipo=diagnostico',
     webhook_interesse: 'https://script.google.com/macros/s/SEU_ID/exec?src=dados&key=CHAVE&tipo=interesse',
+    webhooks_dados: [
+      { tipo: 'interesse', nome: 'Lista de interesse no MDL', ajuda: 'Quem levantou a mão. Cria o lead se não existir e distribui entre as concierges.' },
+      { tipo: 'checkin', nome: 'Presença no Workshop', ajuda: 'Quem assistiu ao Workshop. Marca "Participou do Workshop" no lead.' },
+      { tipo: 'presentes', nome: 'Baixou os presentes', ajuda: 'Quem baixou os materiais/presentes do Workshop. Marca a tag no card.' },
+      { tipo: 'confirmacao', nome: 'Confirmou presença', ajuda: 'Quem confirmou que vai assistir.' },
+      { tipo: 'diagnostico', nome: 'Diagnóstico respondido', ajuda: 'Respostas do diagnóstico (as outras colunas viram respostas no card).' },
+      { tipo: 'obrigado', nome: 'Página de obrigado', ajuda: 'Dados extras do formulário de obrigado.' }
+    ].map((w) => Object.assign(w, {
+      url: 'https://script.google.com/macros/s/SEU_ID/exec?src=dados&key=CHAVE&tipo=' + w.tipo,
+      url_get: 'https://script.google.com/macros/s/SEU_ID/exec?src=dados&key=CHAVE&tipo=' + w.tipo + '&email=%EMAIL%&telefone=%PHONE%&nome=%FIRSTNAME%'
+    })),
     ac_tag_interesse: 'lista de interesse mdl [2026.10.07] Workshop Online (MDL)',
     webhook: 'https://script.google.com/macros/s/SEU_ID/exec?src=hotmart&key=CHAVE', id_padrao: '8502151', id_vip: '8502486', base_id: '1ihgdFxaR5cM6xyAECvJ-IORN1dmghRin9gmRFCsHe5I', ultima_sincronizacao: atras(0.4), diag_planilha_id: '1XZ1PFVywi1fCAkkTFsjlFtLZPgP-UwSMIpIrsvfmRqY', diag_aba: 'Diagnosticos', diag_ultima_sinc: atras(0.2), modo_teste: false, hotmart_api: { configurada: false, client_id: '' },
     webhooks: [{ recebido_em: atras(0.2), evento: 'PURCHASE_APPROVED', produto: '8502486', transacao: 'HP1700102947', email: 'felipe.cardoso@exemplo.com', status: 'ok', resultado: 'Lead criado: L113' },
@@ -333,6 +345,7 @@
         if (b.simular) return;
         atu++;
         if (b.tipo === 'checkin') { l.checkin = 'sim'; l.checkin_em = agora(); }
+        else if (b.tipo === 'presentes') { l.presentes = 'sim'; l.presentes_em = agora(); }
         else if (b.tipo === 'confirmacao') { l.confirmado = 'sim'; l.confirmado_em = agora(); }
         else if (b.tipo === 'diagnostico') { l.diagnostico = 'feito'; l.diagnostico_em = agora(); l.diagnostico_respostas = JSON.stringify(r.respostas || {}); }
         else { l.dados_extra = JSON.stringify(Object.assign({}, JSON.parse(l.dados_extra || '{}'), r.respostas || {})); }

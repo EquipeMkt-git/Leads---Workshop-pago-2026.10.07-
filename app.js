@@ -117,7 +117,8 @@
     interesse: { rot: 'Interesse no MDL', ic: 'estrela', vals: { sim: ['Interessado - MDL', 'interesse'], nao: ['Sem interesse no MDL', ''] } },
     diagnostico: { rot: 'Diagnóstico', ic: 'leads', vals: { enviado: ['Diagnóstico enviado', 'evento'], feito: ['Diagnóstico feito', 'ok'] } },
     reuniao: { rot: 'Reunião', ic: 'chat', vals: { agendada: ['Reunião agendada', 'evento'], feita: ['Reunião feita', 'ok'], nao_compareceu: ['Faltou na reunião', 'alerta'] } },
-    checkin: { rot: 'Participou', ic: 'trofeu', vals: { sim: ['Participou do Workshop', 'ok'], nao: ['Não participou', 'alerta'] } }
+    checkin: { rot: 'Participou', ic: 'trofeu', vals: { sim: ['Participou do Workshop', 'ok'], nao: ['Não participou', 'alerta'] } },
+    presentes: { rot: 'Presentes do Workshop', ic: 'download', vals: { sim: ['Baixou os presentes', 'presentes'], nao: ['Não baixou os presentes', ''] } }
   };
   /** Rótulo claro de cliente: separa quem está ativo de quem já saiu. */
   function rotuloCliente(txt, produto) {
@@ -1229,7 +1230,8 @@
               interesse: [['Levantaram a mão para o MDL', 'sim', '#E0531F']],
               diagnostico: [['Diagnóstico respondido', 'feito', '#0B7A9E']],
               reuniao: [['Reunião realizada', 'feita', '#C2410C']],
-              checkin: [['Participaram do evento', 'sim', '#12A150']]
+              checkin: [['Participaram do evento', 'sim', '#12A150']],
+              presentes: [['Baixaram os presentes', 'sim', '#0B7A9E']]
             };
             const itens = [];
             marcosDoSistema().forEach((k) => (todos[k] || []).forEach(([rot, val, cor]) => itens.push([rot, leads.filter((l) => l[k] === val).length, cor])));
@@ -1682,9 +1684,18 @@
         </section>
 
         <section class="card bloco">
-          <h3>Dados de fora (diagnóstico, obrigado, check-in)</h3>
-          <p class="small muted" style="margin-top:-6px">Use esta URL como webhook no formulário do diagnóstico, na automação da página de obrigado ou em qualquer ferramenta (Zapier, Make, ActiveCampaign). Troque <code>tipo=diagnostico</code> por <code>obrigado</code>, <code>confirmacao</code> ou <code>checkin</code>. O sistema casa a pessoa por e-mail ou telefone.</p>
-          <div class="copiar" style="margin-bottom:12px"><input class="input" readonly value="${esc(c.webhook_dados || '')}" id="wd-url"><button class="btn navy" data-act="copiar-dados">Copiar</button></div>
+          <h3>Dados de fora (webhooks do ActiveCampaign e de formulários)</h3>
+          <p class="small muted" style="margin-top:-6px">Cada automação tem a sua URL pronta abaixo. Cole no passo <b>Webhook</b> da automação do Active (ou no Zapier, Make, formulário). O sistema casa a pessoa por <b>e-mail ou telefone</b>. Use sempre o endereço terminado em <code>/exec</code> — o <code>/dev</code> do editor pede login e não funciona para ferramentas de fora.</p>
+          ${(c.webhooks_dados || []).map((w) => `
+            <div class="url-bloco">
+              <div class="url-tit"><b>${esc(w.nome)}</b><span class="tag">tipo=${esc(w.tipo)}</span></div>
+              <p class="small muted">${esc(w.ajuda)}</p>
+              <div class="copiar"><input class="input" readonly value="${esc(w.url)}" id="wu-${esc(w.tipo)}"><button class="btn navy" data-act="copiar-campo" data-alvo="wu-${esc(w.tipo)}">Copiar</button></div>
+              <details class="url-alt"><summary>Se o Active não conseguir enviar o corpo do webhook</summary>
+                <p class="small muted">Esta versão leva os dados na própria URL (funciona por POST e por GET). As tags <code>%EMAIL%</code>, <code>%PHONE%</code> e <code>%FIRSTNAME%</code> são preenchidas pelo Active.</p>
+                <div class="copiar"><input class="input" readonly value="${esc(w.url_get)}" id="wug-${esc(w.tipo)}"><button class="btn line" data-act="copiar-campo" data-alvo="wug-${esc(w.tipo)}">Copiar</button></div>
+              </details>
+            </div>`).join('')}
           <div class="secao">Diagnóstico: planilha de respostas</div>
           <p class="small muted" style="margin-top:-4px">O sistema lê essa planilha sozinho a cada 15 minutos e preenche o diagnóstico de <b>quem já é lead aqui</b> (casando por e-mail ou telefone). Quem respondeu e não comprou é ignorado.</p>
           <div class="row">
@@ -1698,15 +1709,13 @@
           </div>
           <div id="diag-res"></div>
 
-          ${(c.marcos_ativos || []).indexOf('interesse') >= 0 ? `
-          <div class="secao">Lista de interesse no MDL (levantada de mão)</div>
-          <p class="small muted" style="margin-top:-4px">Ligue esta URL na automação do ActiveCampaign que marca a tag <b>${esc(c.ac_tag_interesse || '')}</b>. Quem levantar a mão recebe a tag <b>Interessado - MDL</b>, fica com o card destacado e é dividido na hora entre as concierges cadastradas — mesmo quem ainda não estava no sistema entra como lead novo.</p>
-          <div class="copiar" style="margin-bottom:14px"><input class="input" readonly value="${esc(c.webhook_interesse || '')}" id="wi-url"><button class="btn navy" data-act="copiar-interesse">Copiar</button></div>` : ''}
+          ${(c.marcos_ativos || []).indexOf('interesse') >= 0 && c.ac_tag_interesse ? `<p class="hint">Tag do Active que dispara a lista de interesse: <b>${esc(c.ac_tag_interesse)}</b></p>` : ''}
 
           <div class="secao">Importar por planilha</div>
           <div class="row" style="flex-wrap:wrap">
             ${(c.marcos_ativos || []).indexOf('interesse') >= 0 ? `<button class="btn line sm" data-act="imp-interesse">${I.upload}Lista de interesse (MDL)</button>` : ''}
-            ${(c.marcos_ativos || []).indexOf('checkin') >= 0 ? `<button class="btn line sm" data-act="imp-checkin">${I.upload}Check-in do evento</button>` : ''}
+            ${(c.marcos_ativos || []).indexOf('checkin') >= 0 ? `<button class="btn line sm" data-act="imp-checkin">${I.upload}Presença no Workshop</button>` : ''}
+            ${(c.marcos_ativos || []).indexOf('presentes') >= 0 ? `<button class="btn line sm" data-act="imp-presentes">${I.upload}Baixou os presentes</button>` : ''}
             ${(c.marcos_ativos || []).indexOf('confirmado') >= 0 ? `<button class="btn line sm" data-act="imp-confirmacao">${I.upload}Confirmações</button>` : ''}
             <button class="btn line sm" data-act="imp-diagnostico">${I.upload}Diagnóstico</button>
             <button class="btn line sm" data-act="imp-obrigado">${I.upload}Página de obrigado</button>
@@ -1993,7 +2002,8 @@
   /* ---------------- importação de check-in / confirmações / diagnóstico / dados */
   const IMP_MARCOS = {
     interesse: ['Lista de interesse no MDL', 'Lista de quem levantou a mão para conhecer o MDL (exportação do ActiveCampaign, por exemplo). Quem já é lead recebe a tag <b>Interessado - MDL</b>; quem não está no sistema entra como lead novo. Todos são divididos entre as concierges na hora.'],
-    checkin: ['Check-in do evento', 'Lista de quem passou no credenciamento. Marca "Participou do Workshop" em cada lead encontrado.'],
+    checkin: ['Presença no Workshop', 'Lista de presença do Workshop (quem assistiu). Marca "Participou do Workshop" em cada lead encontrado.'],
+    presentes: ['Baixou os presentes', 'Lista de quem baixou os materiais/presentes do Workshop. Marca a tag no card de cada lead encontrado.'],
     confirmacao: ['Confirmações de presença', 'Lista de quem confirmou presença. Marca "Confirmou presença".'],
     diagnostico: ['Respostas do diagnóstico', 'Planilha de respostas do formulário. Marca o diagnóstico como feito e guarda as respostas no card do lead.'],
     obrigado: ['Dados da página de obrigado', 'Planilha com os dados extras (ActiveCampaign, formulário do obrigado). Preenche empresa, cargo e faturamento quando estiverem vazios e guarda o resto no card.']
@@ -2227,8 +2237,7 @@
       case 'nova-mensagem': abrirFormMensagem(); break;
       case 'editar-mensagem': abrirFormMensagem(id); break;
       case 'sair': api('logout').catch(() => {}); sairLocal(); break;
-      case 'copiar-dados': copiarTexto(document.getElementById('wd-url').value); break;
-      case 'copiar-interesse': copiarTexto(document.getElementById('wi-url').value); break;
+      case 'copiar-campo': { const alvo = document.getElementById(el.dataset.alvo); if (alvo) copiarTexto(alvo.value); break; }
       case 'add-produto-hot': {
         const box = document.getElementById('cfg-produtos');
         box.insertAdjacentHTML('beforeend', linhaProduto({ id: '', nome: '', tipo: 'padrao' }));
@@ -2255,6 +2264,7 @@
         break;
       case 'imp-interesse': abrirImportarMarcos('interesse'); break;
       case 'imp-checkin': abrirImportarMarcos('checkin'); break;
+      case 'imp-presentes': abrirImportarMarcos('presentes'); break;
       case 'imp-confirmacao': abrirImportarMarcos('confirmacao'); break;
       case 'imp-diagnostico': abrirImportarMarcos('diagnostico'); break;
       case 'imp-obrigado': abrirImportarMarcos('obrigado'); break;

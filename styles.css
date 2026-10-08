@@ -219,6 +219,7 @@ main { padding: 14px 16px calc(var(--nav-h) + 24px + var(--safe-b)); max-width: 
 .tag.alerta { background: var(--vermelho-2); color: var(--vermelho); }
 .tag.ok { background: var(--verde-2); color: #0B7A3B; }
 .tag.interesse { background: #E0531F; color: #fff; }
+.tag.presentes { background: #E3F2F7; color: #0B6E8C; }
 .tag svg { width: 12px; height: 12px; }
 .lead-actions { display: flex; gap: 8px; }
 .lead-actions .btn { flex: 1; }
@@ -421,3 +422,12 @@ code { background: var(--fundo); padding: 1px 5px; border-radius: 5px; font-size
 .nav.n6 button { font-size: 9.5px; }
 .nav.n6 button svg { width: 20px; height: 20px; }
 @media (min-width: 900px) { .nav.n6 button { font-size: 14px; } .nav.n6 button svg { width: 22px; height: 22px; } }
+
+/* ---------- URLs de webhook em Ajustes ---------- */
+.url-bloco { border: 1.5px solid var(--borda); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+.url-tit { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 2px; }
+.url-tit .tag { font-size: 10.5px; }
+.url-bloco p.small { margin: 2px 0 8px; }
+.url-alt { margin-top: 8px; }
+.url-alt summary { cursor: pointer; font-size: 12.5px; color: var(--azul); font-weight: 600; }
+.url-alt p.small { margin: 8px 0; }
