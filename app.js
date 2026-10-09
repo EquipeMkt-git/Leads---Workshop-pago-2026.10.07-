@@ -24,8 +24,8 @@
     token: null, user: null, modo: 'usuario', view: 'novo',
     leads: [], vendas: [], produtos: [], mensagens: [], usuarios: [], historico: [], config: {}, fases: [], links: {},
     modoSistema: 'evento', marcosAtivos: null, podeGerenciar: false, nomeSistema: '',
-    busca: '', filtro: 'todos', limite: 60,
-    adm: { status: 'todos', resp: 'todos', tipo: 'todos', cliente: 'todos', origem: 'todos' },
+    busca: '', filtro: 'todos', limite: 60, ordem: 'ranking',
+    adm: { status: 'todos', resp: 'todos', tipo: 'todos', cliente: 'todos', origem: 'todos', classe: 'todos', cargo: 'todos', porte: 'todos' },
     painel: { resp: 'todos', tipo: 'todos', origem: 'todos' },
     catalogo: 'fases', funilLista: false,
     carregado: false, sync: false
@@ -99,6 +99,27 @@
   const vendasDoLead = (id) => S.vendas.filter((v) => v.lead_id === id);
   const faseDe = (l) => S.fases.find((f) => f.id === l.fase_id) || null;
   const usaVip = () => S.modoSistema !== 'perpetuo';
+  /* ----------- Ranking do lead (mesma leitura da planilha do comercial) ----- */
+  const CLASSIF = {
+    quente:   { rot: 'Quente',          ico: '🔥', cls: 'c-quente',  ordem: 6, ajuda: 'Dono de empresa com porte e sinal de interesse. Prioridade máxima.' },
+    mql_mais: { rot: 'MQL+',            ico: '⚡', cls: 'c-mqlmais', ordem: 5, ajuda: 'Bom perfil e bom porte. Vale o contato logo.' },
+    mql:      { rot: 'MQL',             ico: '✅', cls: 'c-mql',     ordem: 4, ajuda: 'Dentro do perfil, precisa de qualificação.' },
+    viavel:   { rot: 'Viável',          ico: '🔵', cls: 'c-viavel',  ordem: 3, ajuda: 'Pode virar cliente, mas não é prioridade agora.' },
+    baixo:    { rot: 'Baixo potencial', ico: '⚪', cls: 'c-baixo',   ordem: 2, ajuda: 'Porte ou cargo fora do ideal.' },
+    fora:     { rot: 'Fora do perfil',  ico: '❌', cls: 'c-fora',    ordem: 1, ajuda: 'Não é público do MDL.' }
+  };
+  const classifDe = (l) => CLASSIF[l.classificacao] || null;
+  const ehDono = (l) => /dono|s[óo]cio|propriet|ceo|fundador/i.test(String(l.cargo || ''));
+  const fatNum = (l) => {
+    const t = String(l.faturamento || '');
+    if (/acima de 500|mais de 500|1\s*mi|milh/i.test(t)) return 500;
+    if (/300 a 500/i.test(t)) return 300;
+    if (/100 a 300/i.test(t)) return 100;
+    if (/60 a 100/i.test(t)) return 60;
+    if (/30 a 60/i.test(t)) return 30;
+    if (/ate 30|até 30/i.test(t)) return 10;
+    return 0;
+  };
   const usaInteresse = () => marcosDoSistema().indexOf('interesse') >= 0;
   function indiceDiag(l) {
     if (!l.diagnostico_respostas) return '';
@@ -385,6 +406,9 @@
   }
   function aplicaFiltroChip(lista, f) {
     if (f === 'interesse') return lista.filter((l) => l.interesse === 'sim');
+    if (f === 'quentes') return lista.filter((l) => l.classificacao === 'quente' || l.classificacao === 'mql_mais');
+    if (f === 'participou') return lista.filter((l) => l.checkin === 'sim');
+    if (f === 'donos') return lista.filter((l) => ehDono(l) && fatNum(l) >= 60);
     if (f === 'vip') return lista.filter((l) => l.tipo_ingresso === 'vip');
     if (f === 'padrao') return lista.filter((l) => l.tipo_ingresso !== 'vip');
     if (f === 'clientes') return lista.filter(ehCliente);
@@ -402,10 +426,12 @@
     // interessados da concierge, mesmo os que já estão em tratativa, ganhos ou perdidos.
     const baseInteresse = S.leads.filter((l) => l.interesse === 'sim' && (l.responsavel_id === uid || !l.responsavel_id));
     const baseDe = (f) => (f === 'interesse' && st === 'novo' ? baseInteresse : base);
-    const ord = {
-      novo: (a, b) => String(b.criado_em).localeCompare(String(a.criado_em)),
-      tratativa: (a, b) => String(a.ultima_acao || a.inicio_tratativa).localeCompare(String(b.ultima_acao || b.inicio_tratativa)),
-    }[st] || ((a, b) => String(b.fechado_em || b.atualizado_em).localeCompare(String(a.fechado_em || a.atualizado_em)));
+    const ord = S.ordem === 'ranking'
+      ? (a, b) => (b.score || 0) - (a.score || 0) || String(b.criado_em).localeCompare(String(a.criado_em))
+      : {
+        novo: (a, b) => String(b.criado_em).localeCompare(String(a.criado_em)),
+        tratativa: (a, b) => String(a.ultima_acao || a.inicio_tratativa).localeCompare(String(b.ultima_acao || b.inicio_tratativa)),
+      }[st] || ((a, b) => String(b.fechado_em || b.atualizado_em).localeCompare(String(a.fechado_em || a.atualizado_em)));
     let lista = aplicaFiltroChip(aplicaBusca(baseDe(S.filtro)), S.filtro).sort(ord);
 
     const minhasVendas = S.vendas.filter((v) => v.usuario_id === uid && v.status === 'ativa');
@@ -417,6 +443,7 @@
       </div>`;
 
     const chipsDef = [['todos', 'Todos']].concat(usaInteresse() && st === 'novo' ? [['interesse', 'Interessados - MDL']] : [])
+      .concat([['quentes', '🔥 Quentes e MQL+'], ['donos', 'Donos +60k'], ['participou', 'Participou do Workshop']])
       .concat(usaVip() ? [['vip', 'VIP'], ['padrao', 'Padrão']] : [])
       .concat([['clientes', 'Clientes'], ['eventos', 'Já foi a eventos']]);
     if (st === 'tratativa') chipsDef.push(['parados', 'Parados +48h']);
@@ -432,6 +459,10 @@
         <div class="acoes"><button class="btn sm amarelo" data-act="novo-lead">${I.mais}Lead</button></div></div>
       <div class="busca">${I.busca}<input class="input" data-busca placeholder="Buscar nome, telefone, e-mail, cidade" value="${esc(S.busca)}" enterkeyhint="search"></div>
       <div class="chips">${chips}</div>
+      <div class="ordem-linha">
+        <button class="btn line sm ${S.ordem === 'ranking' ? 'on' : ''}" data-act="ordem" data-ordem="ranking">${I.estrela}Melhor ranking</button>
+        <button class="btn line sm ${S.ordem !== 'ranking' ? 'on' : ''}" data-act="ordem" data-ordem="data">${I.relogio}Mais recentes</button>
+      </div>
       ${aviso}
       ${lista.length ? `<div class="lista">${visiveis.map(cardLead).join('')}</div>
         ${lista.length > S.limite ? `<div class="mais"><button class="btn line" data-act="mais">Mostrar mais (${lista.length - S.limite})</button></div>` : ''}`
@@ -485,6 +516,10 @@
 
   function tagsLead(l, completo) {
     const t = [];
+    const cl = classifDe(l);
+    if (cl) t.push(`<span class="tag ${cl.cls}" title="Ranking ${l.score} · ${esc(cl.ajuda)}">${cl.ico} ${cl.rot} <b>${l.score}</b></span>`);
+    if (ehDono(l)) t.push('<span class="tag dono">Dono / Sócio</span>');
+    if (l.faturamento) t.push(`<span class="tag fat" title="Faturamento declarado">${esc(l.faturamento)}</span>`);
     if (usaVip()) t.push(l.tipo_ingresso === 'vip' ? `<span class="tag vip">${I.estrela}VIP</span>` : '<span class="tag padrao">Padrão</span>');
     marcosDoSistema().forEach((k) => {
       const v = MARCOS_INFO[k].vals[l[k]];
@@ -530,7 +565,9 @@
       : l.status === 'tratativa' ? 'Última ação ' + rel(l.ultima_acao || l.inicio_tratativa)
         : fmtData(l.fechado_em || l.atualizado_em);
     return `
-      <article class="card lead ${l.tipo_ingresso === 'vip' ? 'vip' : ''} ${l.interesse === 'sim' ? 'interessado' : ''}">
+      <article class="card lead ${l.tipo_ingresso === 'vip' ? 'vip' : ''} ${l.interesse === 'sim' ? 'interessado' : ''} ${l.status === 'ganho' ? 'fechado' : ''} ${(l.classificacao === 'quente' && l.status !== 'ganho') ? 'quente' : ''}">
+        ${l.status === 'ganho' ? `<div class="faixa-ouro"><span class="brilho"></span>${I.trofeu}<b>Cliente MDL</b><span class="ouro-sub">fechado por ${esc(l.responsavel_nome || 'nós')}</span></div>` : ''}
+        ${l.interesse === 'sim' && l.status !== 'ganho' ? '<div class="faixa-mdl"><span class="pulso"></span>Levantou a mão para o MDL</div>' : ''}
         <div class="lead-top" data-act="abrir" data-id="${l.id}">
           <div class="avatar" style="background:${corDe(l.nome)}">${esc(iniciais(l.nome))}</div>
           <div class="lead-main"><h3>${esc(l.nome || '(sem nome)')}</h3><div class="meta">${esc(meta || l.email || '')}</div>
@@ -720,6 +757,8 @@
         ${(pode && st === 'tratativa') || (st === 'tratativa' && souCoord()) ? blocoFase(l) : ''}
         ${pode && st !== 'novo' ? blocoMarcos(l) : ''}
 
+        ${blocoPerfil(l)}
+
         <div class="info">${info.map(([k, v, c]) => `<div class="${c || ''}"><span>${k}</span><b>${esc(v)}</b></div>`).join('')}</div>
 
         ${vs.length ? `<div class="secao">Vendas</div>${vs.map((v) => `
@@ -756,6 +795,34 @@
         carregarHistorico(l.id, sh);
       }
     });
+  }
+
+  /** Perfil comercial do lead + por que ele tem esse ranking. */
+  function blocoPerfil(l) {
+    const cl = classifDe(l);
+    const campos = [
+      ['Cargo', l.cargo], ['Empresa', l.empresa], ['Ramo', l.ramo],
+      ['Faturamento', l.faturamento], ['Funcionários', l.funcionarios],
+      ['Estado', l.estado], ['Conhece a 4blue', l.conhece_4blue], ['Programa 4blue', l.programa_4blue]
+    ].filter(([, v]) => v);
+    if (!cl && !campos.length) return '';
+    const motivos = String(l.score_motivos || '').split(' · ').filter(Boolean);
+    const compras = String(l.compras || '').split('\n').filter(Boolean).map((x) => {
+      const p2 = x.split('|');
+      return `${p2[1] || p2[0]}${p2[2] ? ' · ' + (p2[2] === 'vip' ? 'VIP' : 'Padrão') : ''}${num(p2[3]) ? ' · ' + brl(p2[3]) : ''}`;
+    });
+    return `
+      <div class="secao">Perfil e ranking</div>
+      ${cl ? `<div class="rank-box ${cl.cls}">
+        <div class="rank-top"><span class="rank-ico">${cl.ico}</span>
+          <div><b>${cl.rot}</b><div class="small muted">${esc(cl.ajuda)}</div></div>
+          <span class="rank-pts">${l.score}</span></div>
+        ${motivos.length ? `<details class="rank-por"><summary>Por que esse ranking</summary>
+          <ul>${motivos.map((m) => `<li>${esc(m)}</li>`).join('')}</ul></details>` : ''}
+      </div>` : ''}
+      ${campos.length ? `<div class="info">${campos.map(([k, v]) => `<div><span>${k}</span><b>${esc(v)}</b></div>`).join('')}</div>` : ''}
+      ${l.desafio ? `<div class="cliente-box exmdl" style="margin-top:8px"><span class="small muted">Principal desafio</span><div>${esc(l.desafio)}</div></div>` : ''}
+      ${compras.length > 1 ? `<div class="cliente-box exmdl" style="margin-top:8px"><span class="small muted">Compras desta pessoa</span>${compras.map((c) => `<div>• ${esc(c)}</div>`).join('')}</div>` : ''}`;
   }
 
   function blocoFase(l) {
@@ -1247,6 +1314,32 @@
         </section>
 
         <section class="card bloco">
+          <h3>Ranking dos leads</h3>
+          <p class="small muted" style="margin-top:-6px">Mesma leitura da planilha do comercial: cargo, porte da empresa, relação com a 4blue e o que a pessoa fez na campanha.</p>
+          ${(() => {
+            const tot = leads.length || 1;
+            return Object.entries(CLASSIF).sort((a, b) => b[1].ordem - a[1].ordem).map(([k, v]) => {
+              const n = leads.filter((l) => l.classificacao === k).length;
+              const cor = { quente: '#D93025', mql_mais: '#E08A00', mql: '#12A150', viavel: '#0369B1', baixo: '#8A939B', fora: '#C7D0DB' }[k];
+              return barra(v.ico + ' ' + v.rot, n, tot, `${n} · ${pct(n, tot)}`, cor);
+            }).join('');
+          })()}
+          <div class="secao">Quem vale o contato agora</div>
+          ${(() => {
+            const donos = leads.filter(ehDono);
+            const itens = [
+              ['Donos / sócios', donos.length],
+              ['Donos com +60mil/mês', donos.filter((l) => fatNum(l) >= 60).length],
+              ['Donos com +100mil/mês', donos.filter((l) => fatNum(l) >= 100).length],
+              ['Quentes que ainda não são clientes MDL', leads.filter((l) => l.classificacao === 'quente' && !ehMdlAtivo(l)).length],
+              ['Levantaram a mão e participaram', leads.filter((l) => l.interesse === 'sim' && l.checkin === 'sim').length]
+            ];
+            const mx = Math.max(1, ...itens.map((i) => i[1]));
+            return itens.map(([r, n]) => barra(r, n, mx, String(n), '#011527')).join('');
+          })()}
+        </section>
+
+        <section class="card bloco">
           <h3>Vendas por produto</h3>
           <div class="legenda"><span><i style="background:var(--azul)"></i>Total</span><span><i style="background:var(--amarelo)"></i>Entrada</span></div>
           ${prods.length ? prods.map(([n, p]) => barra(esc(n) + ` <span class="muted">(${p.n})</span>`, p.total - p.ent, maxProd, `${brlCurto(p.ent)} / <b>${brlCurto(p.total)}</b>`, null, p.ent)).join('') : '<p class="muted small">Nenhuma venda ainda.</p>'}
@@ -1324,12 +1417,18 @@
     if (A.resp !== 'todos') ls = ls.filter((l) => (A.resp === '__sem' ? !l.responsavel_id : l.responsavel_id === A.resp));
     if (A.tipo !== 'todos') ls = ls.filter((l) => (l.tipo_ingresso === 'vip' ? 'vip' : 'padrao') === A.tipo);
     if (A.origem !== 'todos') ls = ls.filter((l) => (l.origem_evento || '(sem origem)') === A.origem);
+    if (A.classe !== 'todos') ls = ls.filter((l) => l.classificacao === A.classe);
+    if (A.cargo === 'dono') ls = ls.filter(ehDono);
+    else if (A.cargo === 'outros') ls = ls.filter((l) => l.cargo && !ehDono(l));
+    if (A.porte !== 'todos') ls = ls.filter((l) => fatNum(l) >= Number(A.porte));
     if (A.cliente === 'mdl') ls = ls.filter(ehMdlAtivo);
     else if (A.cliente === 'exmdl') ls = ls.filter((l) => l.cliente_mdl && !ehMdlAtivo(l));
     else if (A.cliente === 'ilu') ls = ls.filter((l) => l.cliente_ilu);
     else if (A.cliente === 'eventos') ls = ls.filter((l) => eventosDe(l).length);
     else if (A.cliente === 'nenhum') ls = ls.filter((l) => !ehCliente(l));
-    return ls.sort((a, b) => String(b.criado_em).localeCompare(String(a.criado_em)));
+    return ls.sort(S.ordem === 'ranking'
+      ? (a, b) => (b.score || 0) - (a.score || 0) || String(b.criado_em).localeCompare(String(a.criado_em))
+      : (a, b) => String(b.criado_em).localeCompare(String(a.criado_em)));
   }
 
   function viewLeadsAdmin() {
@@ -1355,6 +1454,13 @@
         ${usaVip() ? `<select class="input" data-adm="tipo">${sel('tipo', 'todos', 'Padrão + VIP')}${sel('tipo', 'padrao', 'Padrão')}${sel('tipo', 'vip', 'VIP')}</select>` : ''}
         <select class="input" data-adm="origem"><option value="todos">Todas as origens</option>${origensLeads().map((o) => `<option value="${esc(o)}" ${A.origem === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>
         <select class="input" data-adm="cliente">${sel('cliente', 'todos', 'Base: todos')}${sel('cliente', 'mdl', 'Cliente MDL ativo')}${sel('cliente', 'exmdl', 'Ex-MDL')}${sel('cliente', 'ilu', 'Base ILU')}${sel('cliente', 'eventos', 'Já foi a eventos')}${sel('cliente', 'nenhum', 'Não é cliente')}</select>
+        <select class="input" data-adm="classe">${sel('classe', 'todos', 'Ranking: todos')}${Object.entries(CLASSIF).map(([k, v]) => sel('classe', k, v.ico + ' ' + v.rot)).join('')}</select>
+        <select class="input" data-adm="cargo">${sel('cargo', 'todos', 'Cargo: todos')}${sel('cargo', 'dono', 'Só donos / sócios')}${sel('cargo', 'outros', 'Só não-donos')}</select>
+        <select class="input" data-adm="porte">${sel('porte', 'todos', 'Porte: todos')}${sel('porte', '60', 'Faturam +60mil/mês')}${sel('porte', '100', 'Faturam +100mil/mês')}${sel('porte', '300', 'Faturam +300mil/mês')}</select>
+      </div>
+      <div class="ordem-linha">
+        <button class="btn line sm ${S.ordem === 'ranking' ? 'on' : ''}" data-act="ordem" data-ordem="ranking">${I.estrela}Melhor ranking</button>
+        <button class="btn line sm ${S.ordem !== 'ranking' ? 'on' : ''}" data-act="ordem" data-ordem="data">${I.relogio}Mais recentes</button>
       </div>
       <p class="muted small" style="margin:0 0 10px">${ls.length} lead${ls.length === 1 ? '' : 's'} · o CSV exporta a lista filtrada</p>
       ${ls.length ? `<div class="lista">${ls.slice(0, S.limite).map(cardLead).join('')}</div>
@@ -1691,6 +1797,16 @@
         </section>
 
         <section class="card bloco">
+          <h3>Leads duplicados</h3>
+          <p class="small muted" style="margin-top:-6px">A mesma pessoa não pode virar dois leads — isso coloca duas concierges falando com ela. Quando alguém compra dois produtos (Workshop + VIP, por exemplo), o sistema já junta tudo num lead só. Use isto para limpar o que entrou antes dessa correção.</p>
+          <div class="row" style="flex-wrap:wrap;margin-bottom:10px">
+            <button class="btn line sm" data-act="dup-ver" data-loading=" Procurando...">${I.busca}Procurar duplicados</button>
+            <button class="btn navy sm" data-act="dup-juntar" data-loading=" Juntando...">Juntar automaticamente</button>
+          </div>
+          <div id="dup-res"></div>
+        </section>
+
+        <section class="card bloco">
           <h3>Dados de fora (webhooks do ActiveCampaign e de formulários)</h3>
           <p class="small muted" style="margin-top:-6px">Cada automação tem a sua URL pronta abaixo. Cole no passo <b>Webhook</b> da automação do Active (ou no Zapier, Make, formulário). O sistema casa a pessoa por <b>e-mail ou telefone</b>. Use sempre o endereço terminado em <code>/exec</code> — o <code>/dev</code> do editor pede login e não funciona para ferramentas de fora.</p>
           ${(c.webhooks_dados || []).map((w) => `
@@ -1720,6 +1836,7 @@
 
           <div class="secao">Importar por planilha</div>
           <div class="row" style="flex-wrap:wrap">
+            <button class="btn navy sm" data-act="imp-perfil">${I.upload}Perfil dos participantes</button>
             ${(c.marcos_ativos || []).indexOf('interesse') >= 0 ? `<button class="btn line sm" data-act="imp-interesse">${I.upload}Lista de interesse (MDL)</button>` : ''}
             ${(c.marcos_ativos || []).indexOf('checkin') >= 0 ? `<button class="btn line sm" data-act="imp-checkin">${I.upload}Presença no Workshop</button>` : ''}
             ${(c.marcos_ativos || []).indexOf('presentes') >= 0 ? `<button class="btn line sm" data-act="imp-presentes">${I.upload}Baixou os presentes</button>` : ''}
@@ -1751,6 +1868,38 @@
       </div>`;
   }
 
+  /* ------------------------------------------------- leads duplicados */
+  function caixaDup(d, titulo) {
+    const box = document.getElementById('dup-res');
+    if (!box) return;
+    if (!d.grupos || !d.grupos.length) {
+      if (!d.grupos) { box.innerHTML = '<div class="cliente-box mdl">Nenhum lead duplicado. Está tudo certo.</div>'; return; }
+    }
+    const gs = d.grupos || [];
+    box.innerHTML = `<div class="cliente-box ${gs.length ? 'exmdl' : 'mdl'}"><b>${titulo}</b>
+      ${gs.length ? gs.map((g) => `<div class="dup-grupo">${g.leads.map((l) => `
+        <div class="dup-lead ${l.principal ? 'fica' : ''}">
+          <span class="dup-tag">${l.principal ? 'FICA' : 'junta'}</span>
+          <b>${esc(l.nome)}</b>
+          <span class="muted small">${esc(l.responsavel_nome || 'sem responsável')} · ${esc(l.origem_evento || l.status)} · ${l.acoes} ações</span>
+        </div>`).join('')}</div>`).join('') : '<div>Nenhum duplicado encontrado.</div>'}</div>`;
+  }
+  async function verDuplicados() {
+    const d = await api('admin.duplicados', {});
+    caixaDup(d, d.grupos.length ? `${d.grupos.length} pessoa(s) com mais de um lead` : 'Nenhum duplicado encontrado');
+  }
+  async function juntarDuplicados() {
+    const sim = await api('admin.duplicados.juntar', { simular: true });
+    if (!sim.grupos) { caixaDup({ grupos: [] }, 'Nenhum duplicado encontrado'); return; }
+    const txt = sim.detalhes.map((d) => `• ${d.nome} → fica com ${d.responsavel}`).join('\n');
+    if (!confirm(`Vou juntar ${sim.juntados} lead(s) duplicado(s) em ${sim.grupos} pessoa(s):\n\n${txt}\n\nO histórico e as vendas vão para o lead que fica. Confirmar?`)) return;
+    const r = await api('admin.duplicados.juntar', {});
+    await carregar();
+    caixaDup({ grupos: r.detalhes.map((d) => ({ leads: [{ nome: d.nome, responsavel_nome: d.responsavel, origem_evento: d.removidos.length + ' duplicado(s) removido(s)', status: '', acoes: 0, principal: true }] })) },
+      `${r.juntados} lead(s) juntados em ${r.grupos} pessoa(s)`);
+    toast(`${r.juntados} duplicados juntados`, 'ok');
+  }
+
   /* ----------------------------------------------------------- CSV */
   function baixarCsv(nome, cab, linhas) {
     const cel = (v) => { const s = String(v == null ? '' : v); return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
@@ -1776,6 +1925,12 @@
       [(l) => (vendasPor[l.id] || []).map((v) => v.produto_nome).join(' + '), 'Produtos vendidos'],
       [(l) => dec((vendasPor[l.id] || []).reduce((s, v) => s + num(v.valor_entrada), 0) || ''), 'Valor entrada'],
       [(l) => dec((vendasPor[l.id] || []).reduce((s, v) => s + num(v.valor_total), 0) || ''), 'Valor total'],
+      ['score', 'Ranking (pts)'], [(l) => (classifDe(l) ? classifDe(l).ico + ' ' + classifDe(l).rot : ''), 'Classificação'],
+      ['funcionarios', 'Nº Funcionários'], ['ramo', 'Ramo'], ['estado', 'Estado'],
+      ['conhece_4blue', 'Conhece a 4blue'], ['programa_4blue', 'Programa 4blue'], ['desafio', 'Principal desafio'],
+      [(l) => (l.interesse === 'sim' ? 'SIM' : ''), 'Levantou a mão (MDL)'],
+      [(l) => (l.checkin === 'sim' ? 'SIM' : ''), 'Participou do Workshop'],
+      [(l) => (l.presentes === 'sim' ? 'SIM' : ''), 'Baixou os presentes'],
       ['cliente_mdl', 'Cliente MDL'], ['cliente_ilu', 'Cliente ILU'],
       [(l) => eventosDe(l).map((e) => e.e + ' ' + e.t + (/sim/i.test(e.f) ? ' (foi)' : '')).join(' | '), 'Eventos anteriores'],
       ['origem_evento', 'Produto / origem'], ['origem', 'Entrada no sistema'], ['transacao', 'Transação Hotmart'], [(l) => dec(l.valor_ingresso), 'Valor ingresso'], ['obs', 'Observações']
@@ -2009,6 +2164,7 @@
   /* ---------------- importação de check-in / confirmações / diagnóstico / dados */
   const IMP_MARCOS = {
     interesse: ['Lista de interesse no MDL', 'Lista de quem levantou a mão para conhecer o MDL (exportação do ActiveCampaign, por exemplo). Quem já é lead recebe a tag <b>Interessado - MDL</b>; quem não está no sistema entra como lead novo. Todos são divididos entre as concierges na hora.'],
+    perfil: ['Perfil dos participantes', 'Planilha com cargo, empresa, faturamento, nº de funcionários, ramo e relação com a 4blue. É o que alimenta o ranking de cada lead.'],
     checkin: ['Presença no Workshop', 'Lista de presença do Workshop (quem assistiu). Marca "Participou do Workshop" em cada lead encontrado.'],
     presentes: ['Baixou os presentes', 'Lista de quem baixou os materiais/presentes do Workshop. Marca a tag no card de cada lead encontrado.'],
     confirmacao: ['Confirmações de presença', 'Lista de quem confirmou presença. Marca "Confirmou presença".'],
@@ -2016,10 +2172,34 @@
     obrigado: ['Dados da página de obrigado', 'Planilha com os dados extras (ActiveCampaign, formulário do obrigado). Preenche empresa, cargo e faturamento quando estiverem vazios e guarda o resto no card.']
   };
 
+  const CAMPOS_PERFIL_IMP = [
+    ['cargo', 'Cargo', /cargo|funcao|função|posicao|posição/],
+    ['empresa', 'Empresa', /empresa.*revis|^empresa|razao|razão|negocio|negócio/],
+    ['ramo', 'Ramo / segmento', /ramo|segmento|setor|nicho|atividade/],
+    ['faturamento', 'Faturamento', /faturamento/],
+    ['funcionarios', 'Nº de funcionários', /funcion|colaborad|equipe|time|quantos/],
+    ['estado', 'Estado', /^estado$|^uf$/],
+    ['cidade', 'Cidade', /cidade|municipio|município/],
+    ['conhece_4blue', 'Conhece a 4blue', /conhece/],
+    ['programa_4blue', 'Programa 4blue', /programa|mentoria|iluminismo|maquina|máquina/],
+    ['desafio', 'Principal desafio', /desafio|dor|dificuldade|problema/]
+  ];
+  function detectarPerfil(cab) {
+    const h = cab.map((x) => norm(x).trim());
+    const map = {};
+    CAMPOS_PERFIL_IMP.forEach(([k, , re]) => {
+      let achou = -1;
+      h.forEach((x, i) => { if (achou < 0 && re.test(x)) achou = i; });
+      map[k] = achou;
+    });
+    return map;
+  }
+
   function abrirImportarMarcos(tipo) {
     const [titulo, texto] = IMP_MARCOS[tipo];
-    let dados = null, iCab = 0, cab = [], mapa = {}, linhas = [];
+    let dados = null, iCab = 0, cab = [], mapa = {}, linhas = [], mapaP = {};
     const guarda = tipo === 'diagnostico' || tipo === 'obrigado';
+    const ehPerfil = tipo === 'perfil';
     abrirSheet({
       titulo: titulo,
       largo: true,
@@ -2032,13 +2212,19 @@
       onMount: (sh) => {
         const $map = sh.querySelector('#mi-map'), prev = sh.querySelector('#mi-prev');
         const ok = sh.querySelector('#mi-ok'), sim = sh.querySelector('#mi-sim');
-        const campos = [['email', 'E-mail'], ['telefone', 'Telefone'], ['nome', tipo === 'interesse' ? 'Nome' : 'Nome (só para conferir)']];
+        const campos = [['email', 'E-mail'], ['telefone', 'Telefone'], ['nome', (tipo === 'interesse' || ehPerfil) ? 'Nome' : 'Nome (só para conferir)']];
         const pintar = () => {
           const ops = (sel) => '<option value="-1">— não usar —</option>' + cab.map((c, i) => `<option value="${i}" ${sel === i ? 'selected' : ''}>${esc(c || '(coluna ' + (i + 1) + ')')}</option>`).join('');
           $map.innerHTML = `<div class="secao" style="margin-top:4px">Confira as colunas</div>
             <div class="row" style="flex-wrap:wrap">${campos.map(([k, r]) => `<div class="field" style="min-width:200px"><label>${r}</label><select class="input" data-map="${k}">${ops(mapa[k])}</select></div>`).join('')}</div>
-            ${guarda ? '<p class="hint">As outras colunas da planilha entram como respostas no card do lead.</p>' : ''}`;
+            ${guarda ? '<p class="hint">As outras colunas da planilha entram como respostas no card do lead.</p>' : ''}
+            ${ehPerfil ? `<div class="secao">Campos do perfil (alimentam o ranking)</div>
+              <div class="row" style="flex-wrap:wrap">${CAMPOS_PERFIL_IMP.map(([k, r]) => `<div class="field" style="min-width:190px"><label>${r}</label><select class="input" data-mapp="${k}">${ops(mapaP[k])}</select></div>`).join('')}</div>
+              <label class="check"><input type="checkbox" id="ip-sobre"><span>Sobrescrever o que já está preenchido no lead</span></label>
+              <label class="check"><input type="checkbox" id="ip-checkin" checked><span>Marcar essas pessoas como <b>participaram do Workshop</b></span></label>
+              <label class="check"><input type="checkbox" id="ip-criar"><span>Criar quem ainda não está no sistema (entra como lead novo e já distribuído)</span></label>` : ''}`;
           $map.querySelectorAll('select[data-map]').forEach((sel) => sel.addEventListener('change', () => { mapa[sel.dataset.map] = Number(sel.value); montar(); }));
+          $map.querySelectorAll('select[data-mapp]').forEach((sel) => sel.addEventListener('change', () => { mapaP[sel.dataset.mapp] = Number(sel.value); montar(); }));
         };
         const montar = () => {
           const v = (r, k) => (mapa[k] >= 0 ? String(r[mapa[k]] || '').trim() : '');
@@ -2047,6 +2233,11 @@
             const email = v(r, 'email'), tel = v(r, 'telefone');
             if (!email && !tel) return;
             const item = { email, telefone: tel, nome: v(r, 'nome') };
+            if (ehPerfil) {
+              const perfil = {};
+              CAMPOS_PERFIL_IMP.forEach(([k]) => { const i = mapaP[k]; if (i >= 0) { const val = String(r[i] || '').trim(); if (val) perfil[k] = val; } });
+              item.perfil = perfil;
+            }
             if (guarda) {
               const respostas = {};
               cab.forEach((c, i) => {
@@ -2074,12 +2265,27 @@
             cab = dados[iCab];
             const det = detectarColunas(cab);
             mapa = { email: det.email, telefone: det.telefone, nome: det.nome };
+            if (ehPerfil) mapaP = detectarPerfil(cab);
             pintar(); montar();
           } catch (err) { prev.textContent = 'Não consegui ler o arquivo: ' + err.message; ok.disabled = sim.disabled = true; }
         });
         const enviar = (simular) => async () => {
-          const r = await api('admin.importar.marcos', { tipo, linhas, simular });
+          const extra = ehPerfil ? {
+            sobrescrever: sh.querySelector('#ip-sobre').checked,
+            marcar_checkin: sh.querySelector('#ip-checkin').checked,
+            criar: sh.querySelector('#ip-criar').checked
+          } : {};
+          const r = await api('admin.importar.marcos', Object.assign({ tipo, linhas, simular }, extra));
           const box = sh.querySelector('#mi-res');
+          if (ehPerfil) {
+            const txt3 = `${r.encontrados} leads encontrados · ${r.atualizados} atualizados · ${r.criados} criados · ${r.nao_encontrados} fora do sistema`;
+            if (simular) {
+              box.innerHTML = `<div class="cliente-box exmdl" style="margin-top:10px"><b>Simulação (nada foi gravado)</b>${txt3}
+                ${r.exemplos_nao_encontrados.length ? `<div class="small" style="margin-top:6px">Não encontrados: ${esc(r.exemplos_nao_encontrados.join(', '))}</div>` : ''}</div>`;
+              return;
+            }
+            fecharSheet(); toast(txt3, 'ok'); await carregar(); return;
+          }
           if (tipo === 'interesse') {
             const porU = Object.entries(r.por_usuario || {}).map(([n, q]) => `${n} (${q})`).join(', ');
             const txt2 = `${r.marcados} leads já no sistema · ${r.criados} leads novos criados${r.ja_tinham ? ` · ${r.ja_tinham} já estavam na lista` : ''}`;
@@ -2244,6 +2450,9 @@
       case 'nova-mensagem': abrirFormMensagem(); break;
       case 'editar-mensagem': abrirFormMensagem(id); break;
       case 'sair': api('logout').catch(() => {}); sairLocal(); break;
+      case 'ordem': S.ordem = el.dataset.ordem; renderMain(); break;
+      case 'dup-ver': comBotao(el, verDuplicados); break;
+      case 'dup-juntar': comBotao(el, juntarDuplicados); break;
       case 'copiar-campo': { const alvo = document.getElementById(el.dataset.alvo); if (alvo) copiarTexto(alvo.value); break; }
       case 'add-produto-hot': {
         const box = document.getElementById('cfg-produtos');
@@ -2272,6 +2481,7 @@
       case 'imp-interesse': abrirImportarMarcos('interesse'); break;
       case 'imp-checkin': abrirImportarMarcos('checkin'); break;
       case 'imp-presentes': abrirImportarMarcos('presentes'); break;
+      case 'imp-perfil': abrirImportarMarcos('perfil'); break;
       case 'imp-confirmacao': abrirImportarMarcos('confirmacao'); break;
       case 'imp-diagnostico': abrirImportarMarcos('diagnostico'); break;
       case 'imp-obrigado': abrirImportarMarcos('obrigado'); break;

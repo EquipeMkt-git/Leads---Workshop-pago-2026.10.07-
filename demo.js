@@ -69,7 +69,14 @@
       faturamento: pick(fats), criado_por: i % 9 === 0 ? 'Ana Ribeiro' : 'Hotmart', atualizado_em: '',
       fase_id: '', fase_em: '', confirmado: '', confirmado_em: '', upgrade: '', upgrade_em: '', diagnostico: '', diagnostico_em: '',
       diagnostico_respostas: '', reuniao: '', reuniao_em: '', reuniao_obs: '', checkin: '', checkin_em: '', dados_extra: '',
-      interesse: '', interesse_em: '', presentes: '', presentes_em: ''
+      interesse: '', interesse_em: '', presentes: '', presentes_em: '',
+      funcionarios: pick(['2 a 5', '6 a 10', '11 a 20', '21 a 30', '30 a 50', 'mais de 50']),
+      ramo: pick(['Construção civil', 'Comércio varejista', 'Clínica odontológica', 'Indústria de alimentos', 'Serviços de TI', 'Academia']),
+      estado: pick(['São Paulo', 'Paraná', 'Goiás', 'Rio de Janeiro', 'Ceará', 'Santa Catarina']),
+      conhece_4blue: pick(['Já conheço e sou cliente', 'Conheço, mas nunca comprei nada', 'Conheci agora']),
+      programa_4blue: pick(['Não', 'Não', 'Sim, estou ativo no programa Máquina de lucros', 'Sim, estou ativo no Iluminismo Financeiro', 'Já fui do Iluminismo Financeiro']),
+      desafio: pick(['Falta lucro para os compromissos', 'Ausência de processos definidos', 'Engajar a equipe', 'Não sei precificar', 'Caixa apertado todo mês']),
+      compras: ''
     };
     if (!PERP && i % 3 === 0) { l.presentes = 'sim'; l.presentes_em = atras(1 + r() * 2); }
     if (!PERP && i % 5 === 2) { l.interesse = 'sim'; l.interesse_em = atras(1 + r() * 3); }
@@ -144,7 +151,7 @@
     const c = u.perfil === 'coordenador';
     return {
       usuario: copia(u),
-      leads: copia(L.filter((l) => c || l.status === 'novo' || l.responsavel_id === u.id)),
+      leads: comScore(copia(L.filter((l) => c || l.status === 'novo' || l.responsavel_id === u.id))),
       vendas: copia(V.filter((v) => c || v.usuario_id === u.id)),
       produtos: copia(P.filter((p) => c || p.ativo === 'SIM')),
       mensagens: copia(M.filter((m) => c || m.ativo === 'SIM')),
@@ -156,6 +163,29 @@
       links: { upgrade: config.upgrade_url, upgrade_valor: config.upgrade_valor, diagnostico: config.diagnostico_url, evento: config.evento_data }
     };
   };
+  function pontuar(l) {
+    const tab = (v, pares) => { const t = String(v || ''); for (const [re, p] of pares) if (re.test(t)) return p; return 0; };
+    let p = 19;
+    p += tab(l.cargo, [[/dono|s[óo]cio/i, 22], [/diretor/i, 15], [/gerente|coorden|supervis/i, 8], [/analista|assistente/i, -12]]);
+    p += tab(l.faturamento, [[/acima de 500|500mil|1mi/i, 27], [/300 a 500/i, 20], [/100 a 300/i, 17], [/60 a 100/i, 7], [/30 a 60/i, -8], [/[Aa]té 30/i, -28], [/nada|não tenho/i, -15]]);
+    p += tab(l.funcionarios, [[/mais de 50/i, 5], [/30 a 50/i, 7], [/21 a 30/i, 5], [/11 a 20/i, 6], [/6 a 10/i, -1], [/2 a 5/i, -6]]);
+    p += tab(l.conhece_4blue, [[/sou cliente/i, 19], [/nunca comprei/i, 8], [/conheci agora/i, -8]]);
+    const prog = String(l.programa_4blue || '');
+    if (/ativo no programa Máquina/i.test(prog)) p -= 5;
+    else if (/ativo no Iluminismo/i.test(prog)) p += 10;
+    else if (/Já fui/i.test(prog)) p += 6;
+    if (l.interesse === 'sim') p += 20;
+    if (l.checkin === 'sim') p += 8;
+    if (l.presentes === 'sim') p += 4;
+    if (l.diagnostico === 'feito') p += 6;
+    if (l.confirmado === 'sim') p += 2;
+    if (l.tipo_ingresso === 'vip') p += 6;
+    if (l.reuniao === 'feita') p += 10;
+    const cls = p >= 80 ? 'quente' : p >= 60 ? 'mql_mais' : p >= 40 ? 'mql' : p >= 20 ? 'viavel' : p >= 5 ? 'baixo' : 'fora';
+    return { score: Math.round(p), classificacao: cls };
+  }
+  const comScore = (ls) => ls.map((l) => Object.assign({}, l, pontuar(l), { score_motivos: [l.cargo, l.faturamento, l.interesse === 'sim' ? '+20 levantou a mão para o MDL' : '', l.checkin === 'sim' ? '+8 participou do Workshop' : ''].filter(Boolean).join(' · ') }));
+
   const config = {
     nome_sistema: PERP ? 'Leads - Perpétuo' : 'Leads - Workshop pago [2026.10.07]',
     modo: PERP ? 'perpetuo' : 'evento',
@@ -292,7 +322,23 @@
       if (!b.simular && sem.length) hist('', u, 'distribuicao', sem.length + ' leads distribuídos');
       return { simulacao: !!b.simular, distribuidos: sem.length, por_usuario: porUsuario, concierges: cs.length };
     },
+    'admin.duplicados': () => ({ grupos: [] }),
+    'admin.duplicados.juntar': () => ({ grupos: 0, juntados: 0, detalhes: [] }),
     'admin.importar.marcos': (b, u) => {
+      if (b.tipo === 'perfil') {
+        let ach = 0, atu = 0, cri = 0, nao = 0;
+        b.linhas.forEach((r) => {
+          const em = String(r.email || '').toLowerCase();
+          const l = L.find((x) => em && x.email === em);
+          if (!l) { nao++; if (b.criar) cri++; return; }
+          ach++;
+          if (b.simular) return;
+          Object.entries(r.perfil || {}).forEach(([k, v]) => { if (v && (!l[k] || b.sobrescrever)) l[k] = v; });
+          if (b.marcar_checkin) { l.checkin = 'sim'; l.checkin_em = agora(); }
+          atu++;
+        });
+        return { simulacao: !!b.simular, tipo: 'perfil', linhas: b.linhas.length, encontrados: ach, atualizados: atu, criados: cri, nao_encontrados: nao, exemplos_nao_encontrados: [] };
+      }
       if (b.tipo === 'interesse') {
         const cs = U.filter((x) => x.ativo === 'SIM' && (x.perfil !== 'coordenador' || x.recebe_leads === 'SIM'));
         const abertos = {};
